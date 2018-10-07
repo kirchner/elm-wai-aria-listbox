@@ -6,7 +6,8 @@ This package offers an implementation of the [Listbox
 widget](https://www.w3.org/TR/wai-aria-practices-1.1/#Listbox) as specified in
 the [WAI-ARIA Authoring Practices
 1.1](https://www.w3.org/TR/wai-aria-practices-1.1/). ~~You can see an [example
-of it in action on Ellie](https://todo.org).~~
+of it in action on Ellie](https://todo.org)~~, or take a look at the [demo
+page](https://kirchner.github.io/elm-wai-aria-listbox/).
 
 See more end-to-end example code in the `examples/` folder.
 
