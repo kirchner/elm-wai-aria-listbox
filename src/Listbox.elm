@@ -1,9 +1,10 @@
-module Widget.Listbox exposing
+module Listbox exposing
     ( Listbox, init, view
     , Entry, option, divider
     , update, Msg, subscriptions
     , UpdateConfig, updateConfig, Behaviour
     , ViewConfig, viewConfig, Views, noDivider
+    , HtmlAttributes, HtmlDetails
     , TypeAhead, noTypeAhead, simpleTypeAhead, typeAhead
     , focusedEntry, hoveredEntry
     , focusEntry, focusNextOrFirstEntry, focusPreviousOrFirstEntry
@@ -41,6 +42,8 @@ interactions this widget offers.
 ## View
 
 @docs ViewConfig, viewConfig, Views, noDivider
+
+@docs HtmlAttributes, HtmlDetails
 
 
 ## Type-ahead
@@ -101,7 +104,6 @@ import List.Extra as List
 import Set
 import Task exposing (Task)
 import Time exposing (Posix)
-import Widget exposing (HtmlAttributes, HtmlDetails)
 
 
 {-| Tracks the keyboard and mouse focus as well as the current query. The full
@@ -329,6 +331,21 @@ noDivider : Never -> HtmlDetails
 noDivider _ =
     { attributes = []
     , children = []
+    }
+
+
+{-| A list of attributes which never throw messages. Used to apply styling to
+a DOM element.
+-}
+type alias HtmlAttributes =
+    List (Html.Attribute Never)
+
+
+{-| Used to apply styling and content to a DOM element.
+-}
+type alias HtmlDetails =
+    { attributes : List (Html.Attribute Never)
+    , children : List (Html Never)
     }
 
 

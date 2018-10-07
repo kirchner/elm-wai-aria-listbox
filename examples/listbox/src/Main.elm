@@ -23,8 +23,12 @@ import Html exposing (Html)
 import Html.Attributes as Attributes
 import Html.Events as Events
 import Html.Lazy as Html
-import Widget exposing (HtmlDetails)
-import Widget.Listbox as Listbox exposing (Entry, Listbox)
+import Listbox as Listbox
+    exposing
+        ( Entry
+        , HtmlDetails
+        , Listbox
+        )
 
 
 main : Program {} Model Msg
@@ -126,6 +130,7 @@ view model =
                     [ Html.text <|
                         if List.isEmpty model.selection then
                             "nothing selected"
+
                         else
                             "currently selected: " ++ String.join ", " model.selection
                     ]

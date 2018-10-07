@@ -2,11 +2,6 @@ all:
 	mkdir -p gh-pages
 	cp index.html gh-pages/
 
-	$(MAKE) -C combobox
-	mkdir -p gh-pages/combobox
-	cp combobox/index.html gh-pages/combobox/
-	cp combobox/elm.js gh-pages/combobox/
-
 	$(MAKE) -C listbox
 	mkdir -p gh-pages/listbox
 	cp listbox/index.html gh-pages/listbox/

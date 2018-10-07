@@ -1,10 +1,10 @@
-module Widget.Listbox.Dropdown exposing
+module Listbox.Dropdown exposing
     ( Dropdown, init, view, update, Msg, subscriptions
     , UpdateConfig, updateConfig, Behaviour
     , ViewConfig, viewConfig, Views
     )
 
-{-| This is a collapsible dropdown version of `Widget.Listbox`. The behaviour
+{-| This is a collapsible dropdown version of `Listbox`. The behaviour
 is based on the [Collapsible Dropdown Listbox
 Example](https://www.w3.org/TR/wai-aria-practices-1.1/examples/listbox/listbox-collapsible.html).
 
@@ -45,10 +45,16 @@ import Html.Attributes as Attributes
 import Html.Events as Events
 import Internal.KeyInfo as KeyInfo exposing (KeyInfo)
 import Json.Decode as Decode exposing (Decoder)
+import Listbox as Listbox
+    exposing
+        ( Entry
+        , HtmlAttributes
+        , HtmlDetails
+        , Listbox
+        , TypeAhead
+        )
+import Listbox.Unique as ListboxUnique
 import Task
-import Widget exposing (HtmlAttributes, HtmlDetails)
-import Widget.Listbox as Listbox exposing (Entry, Listbox, TypeAhead)
-import Widget.Listbox.Unique as ListboxUnique
 
 
 {-| Tracks the keyboard and mouse focus as well as the current query and

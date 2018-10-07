@@ -1,16 +1,12 @@
-# elm-wai-aria-widgets
+# elm-wai-aria-listbox
 
-[![Build Status](https://travis-ci.org/kirchner/elm-wai-aria-widgets.svg?branch=master)](https://travis-ci.org/kirchner/elm-wai-aria-widgets)
+[![Build Status](https://travis-ci.org/kirchner/elm-wai-aria-listbox.svg?branch=master)](https://travis-ci.org/kirchner/elm-wai-aria-listbox)
 
-The [WAI-ARIA Authoring Practices
-1.1](https://www.w3.org/TR/wai-aria-practices-1.1/) describe many commonly used
-widgets like dropdown menus (with autocompletion), accordions, tabs, etc.., and
-how they should be made accessible to as many people as possible.
-
-The goal of this package is to make these widgets easily available in Elm.
-Right now, it contains an implementation of the [Listbox
-widget](https://www.w3.org/TR/wai-aria-practices-1.1/#Listbox). ~~You can see an
-[example of it action on Ellie](https://todo.org).~~
+This package offers an implementation of the [Listbox
+widget](https://www.w3.org/TR/wai-aria-practices-1.1/#Listbox) as specified in
+the [WAI-ARIA Authoring Practices
+1.1](https://www.w3.org/TR/wai-aria-practices-1.1/). ~~You can see an [example
+of it in action on Ellie](https://todo.org).~~
 
 See more end-to-end example code in the `examples/` folder.
 
@@ -26,9 +22,8 @@ import Html exposing (Html)
 import Html.Attributes as Attributes
 import Html.Events as Events
 import Html.Lazy as Html
-import Widget exposing (HtmlDetails)
-import Widget.Listbox as Listbox exposing (Entry)
-import Widget.Listbox.Dropdown as Dropdown exposing (Dropdown)
+import Listbox as Listbox exposing (Entry, HtmlDetails)
+import Listbox.Dropdown as Dropdown exposing (Dropdown)
 
 
 main : Program {} Model Msg
@@ -183,8 +178,10 @@ fruits =
 
 ## Usage
 
-Add [the kirchner/elm-wai-aria-widgets Elm package](https://package.elm-lang.org/packages/kirchner/elm-wai-aria-widgets/latest) as a dependency by running
+Add [the kirchner/elm-wai-aria-listbox Elm
+package](https://package.elm-lang.org/packages/kirchner/elm-wai-aria-listbox/latest)
+as a dependency by running
 
 ```
-$ elm install kirchner/elm-wai-aria-widgets
+$ elm install kirchner/elm-wai-aria-listbox
 ```

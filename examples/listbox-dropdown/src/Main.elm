@@ -23,9 +23,8 @@ import Html exposing (Html)
 import Html.Attributes as Attributes
 import Html.Events as Events
 import Html.Lazy as Html
-import Widget exposing (HtmlDetails)
-import Widget.Listbox as Listbox exposing (Entry)
-import Widget.Listbox.Dropdown as Dropdown exposing (Dropdown)
+import Listbox as Listbox exposing (Entry, HtmlDetails)
+import Listbox.Dropdown as Dropdown exposing (Dropdown)
 
 
 main : Program {} Model Msg

@@ -43,7 +43,6 @@ import List.Extra as List
 import Set
 import Task exposing (Task)
 import Time exposing (Posix)
-import Widget exposing (HtmlAttributes, HtmlDetails)
 
 
 
@@ -266,6 +265,16 @@ type alias Views a divider =
     , liDivider : divider -> HtmlDetails
     , empty : Html Never
     , focusable : Bool
+    }
+
+
+type alias HtmlAttributes =
+    List (Html.Attribute Never)
+
+
+type alias HtmlDetails =
+    { attributes : List (Html.Attribute Never)
+    , children : List (Html Never)
     }
 
 

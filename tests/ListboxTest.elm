@@ -1,4 +1,4 @@
-module Widget.ListboxTest exposing (suite)
+module ListboxTest exposing (suite)
 
 import ArchitectureTest
     exposing
@@ -13,17 +13,19 @@ import Expect exposing (Expectation)
 import Fuzz exposing (Fuzzer)
 import Internal.Listbox as Listbox
     exposing
-        ( Effect(..)
+        ( Behaviour
+        , Effect(..)
         , Entry
         , Listbox
         , Msg(..)
+        , TypeAhead(..)
         , UpdateConfig
         )
 import List.Extra as List
+import Listbox as ExternalListbox
 import Set
 import Test exposing (..)
 import Time exposing (Posix)
-import Widget.Listbox
 
 
 suite : Test
@@ -35,23 +37,23 @@ suite =
             }
 
         behaviours =
-            List.map (\behaviour -> behaviour Listbox.NoTypeAhead 0 0)
-                [ Listbox.Behaviour False False False False
-                , Listbox.Behaviour False False False True
-                , Listbox.Behaviour False False True False
-                , Listbox.Behaviour False False True True
-                , Listbox.Behaviour False True False False
-                , Listbox.Behaviour False True False True
-                , Listbox.Behaviour False True True False
-                , Listbox.Behaviour False True True True
-                , Listbox.Behaviour True False False False
-                , Listbox.Behaviour True False False True
-                , Listbox.Behaviour True False True False
-                , Listbox.Behaviour True False True True
-                , Listbox.Behaviour True True False False
-                , Listbox.Behaviour True True False True
-                , Listbox.Behaviour True True True False
-                , Listbox.Behaviour True True True True
+            List.map (\behaviour -> behaviour NoTypeAhead 0 0)
+                [ Behaviour False False False False
+                , Behaviour False False False True
+                , Behaviour False False True False
+                , Behaviour False False True True
+                , Behaviour False True False False
+                , Behaviour False True False True
+                , Behaviour False True True False
+                , Behaviour False True True True
+                , Behaviour True False False False
+                , Behaviour True False False True
+                , Behaviour True False True False
+                , Behaviour True False True True
+                , Behaviour True True False False
+                , Behaviour True True False True
+                , Behaviour True True True False
+                , Behaviour True True True True
                 ]
 
         behaviourToTest behaviour =
@@ -114,7 +116,7 @@ functionTests updateConfig =
                                 []
 
                             actualEntries =
-                                Widget.Listbox.option option :: entries
+                                ExternalListbox.option option :: entries
 
                             ( listbox, _ ) =
                                 Listbox.focusNextOrFirstEntry updateConfig
@@ -133,7 +135,7 @@ functionTests updateConfig =
                                 []
 
                             actualEntries =
-                                Widget.Listbox.option option :: entries
+                                ExternalListbox.option option :: entries
 
                             ( listbox, _ ) =
                                 Listbox.focusPreviousOrFirstEntry updateConfig
@@ -747,7 +749,7 @@ lastOption =
 
 onlyOptions : List (Entry String divider)
 onlyOptions =
-    List.map Widget.Listbox.option options
+    List.map ExternalListbox.option options
 
 
 
@@ -773,7 +775,7 @@ entriesWithKnownOptionFuzzer =
                     List.length entries
             in
             { knownOption = knownOption
-            , entries = front ++ Widget.Listbox.option knownOption :: back
+            , entries = front ++ ExternalListbox.option knownOption :: back
             }
         )
         Fuzz.string
@@ -796,13 +798,13 @@ entryFuzzer =
 optionFuzzer : Fuzzer (Entry String divider)
 optionFuzzer =
     Fuzz.string
-        |> Fuzz.map Widget.Listbox.option
+        |> Fuzz.map ExternalListbox.option
 
 
 dividerFuzzer : Fuzzer (Entry a String)
 dividerFuzzer =
     Fuzz.string
-        |> Fuzz.map Widget.Listbox.divider
+        |> Fuzz.map ExternalListbox.divider
 
 
 

@@ -1,14 +1,13 @@
 {
     "type": "package",
-    "name": "kirchner/elm-wai-aria-widgets",
-    "summary": "Implementation of some WAI-ARIA design patterns and widgets",
+    "name": "kirchner/elm-wai-aria-listbox",
+    "summary": "Implementation of the WAI-ARIA listbox widget",
     "license": "Apache-2.0",
     "version": "1.0.0",
     "exposed-modules": [
-        "Widget",
-        "Widget.Listbox",
-        "Widget.Listbox.Dropdown",
-        "Widget.Listbox.Unique"
+        "Listbox",
+        "Listbox.Dropdown",
+        "Listbox.Unique"
     ],
     "elm-version": "0.19.0 <= v < 0.20.0",
     "dependencies": {

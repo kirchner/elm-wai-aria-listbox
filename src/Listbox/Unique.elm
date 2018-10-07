@@ -1,9 +1,9 @@
-module Widget.Listbox.Unique exposing
+module Listbox.Unique exposing
     ( view, update
     , focusEntry, focusNextOrFirstEntry, focusPreviousOrFirstEntry
     )
 
-{-| This is a variant of `Widget.Listbox` allowing only **at most one**
+{-| This is a variant of `Listbox` allowing only **at most one**
 selection. You just have to replace the `view` and the `update` function with
 the ones in this module.
 
@@ -35,13 +35,13 @@ TODO: link to ellie example
 
 import Html exposing (Html)
 import Json.Decode exposing (Decoder)
-import Widget.Listbox as Listbox exposing (Entry, Listbox, Msg, UpdateConfig, ViewConfig)
+import Listbox exposing (Entry, Listbox, Msg, UpdateConfig, ViewConfig)
 
 
-{-| Use this instead of `Widget.Listbox.view` if the user can only select **at
+{-| Use this instead of `Listbox.view` if the user can only select **at
 most one** entry in the listbox. The only difference between the type signature
-of this function and the one of `Widget.Listbox.view` is that the last argument
-is a `Maybe a` instead of a `List a`.
+of this function and the one of `Listbox.view` is that the last argument is
+a `Maybe a` instead of a `List a`.
 -}
 view :
     ViewConfig a divider
@@ -58,10 +58,10 @@ view config cfg entries listbox selection =
     Listbox.view config cfg entries listbox (maybeToList selection)
 
 
-{-| Use this function instead of `Widget.Listbox.update` if the user can only
+{-| Use this function instead of `Listbox.update` if the user can only
 select **at most one** entry in the listbox. The only difference between the
-type signature of this function and the one of `Widget.Listbox.update` is that
-the last argument is a `Maybe a` instead of a `List a`.
+type signature of this function and the one of `Listbox.update` is that the
+last argument is a `Maybe a` instead of a `List a`.
 -}
 update :
     UpdateConfig a

@@ -23,9 +23,13 @@ import Html exposing (Html)
 import Html.Attributes as Attributes
 import Html.Events as Events
 import Html.Lazy as Html
-import Widget exposing (HtmlDetails)
-import Widget.Listbox as Listbox exposing (Entry, Listbox)
-import Widget.Listbox.Unique as ListboxUnique
+import Listbox as Listbox
+    exposing
+        ( Entry
+        , HtmlDetails
+        , Listbox
+        )
+import Listbox.Unique as ListboxUnique
 
 
 main : Program {} Model Msg
