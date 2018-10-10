@@ -60,6 +60,7 @@ type alias Listbox =
     -- FOCUS
     , focus : Maybe String
     , pendingFocus : Maybe PendingFocus
+    , focusScheduled : Bool
     , hover : Maybe String
     , maybeLastSelectedEntry : Maybe String
 
@@ -90,6 +91,7 @@ init =
     , query = NoQuery
     , focus = Nothing
     , pendingFocus = Nothing
+    , focusScheduled = False
     , hover = Nothing
     , maybeLastSelectedEntry = Nothing
     , ulScrollTop = 0
@@ -861,6 +863,7 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
                                     { listbox
                                         | focus = Just hash
                                         , pendingFocus = Nothing
+                                        , focusScheduled = False
                                     }
                             in
                             if behaviour.selectionFollowsFocus && not shiftDown then
@@ -878,7 +881,11 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
     in
     case msg of
         NoOp ->
-            unchanged
+            if listbox.focusScheduled then
+                focusScheduledFocus
+
+            else
+                unchanged
 
         -- LIST
         ListMouseDown ->
@@ -1230,7 +1237,7 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
                         (liY + liHeight / 2 - viewport.height / 2)
             in
             if entryHidden then
-                focusScheduledFocus
+                fromModel { listbox | focusScheduled = True }
                     |> withEffect centerEntry
 
             else
@@ -1286,22 +1293,21 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
                 scrollUpToNewEntry =
                     DomSetViewportOf (printListId id) viewport.x <|
                         (liY - behaviour.initialGap)
-
-                effect =
-                    if previousEntryHidden then
-                        centerNewEntry
-
-                    else if newEntryTooLow then
-                        scrollDownToNewEntry
-
-                    else if newEntryTooHigh then
-                        scrollUpToNewEntry
-
-                    else
-                        CmdNone
             in
-            focusScheduledFocus
-                |> withEffect effect
+            if previousEntryHidden then
+                fromModel { listbox | focusScheduled = True }
+                    |> withEffect centerNewEntry
+
+            else if newEntryTooLow then
+                fromModel { listbox | focusScheduled = True }
+                    |> withEffect scrollDownToNewEntry
+
+            else if newEntryTooHigh then
+                fromModel { listbox | focusScheduled = True }
+                    |> withEffect scrollUpToNewEntry
+
+            else
+                focusScheduledFocus
 
         ListViewportReceived direction id list ->
             let
@@ -1317,7 +1323,7 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
                                 list.viewport.x
                                 list.scene.height
             in
-            focusScheduledFocus
+            fromModel { listbox | focusScheduled = True }
                 |> withEffect effect
 
 
