@@ -42,6 +42,8 @@ TODO: add ellie example
 
 -}
 
+import Accessibility.Aria as Aria
+import Accessibility.Widget as Widget
 import Browser.Dom as Dom
 import Html exposing (Html)
 import Html.Attributes as Attributes
@@ -427,21 +429,6 @@ view (ViewConfig uniqueId views) ids allEntries (Dropdown data) maybeSelection =
         ]
 
 
-viewClosed :
-    { id : String
-    , labelledBy : String
-    }
-    -> HtmlAttributes
-    -> HtmlDetails
-    -> String
-    -> Maybe a
-    -> Html (Msg a)
-viewClosed ids containerHtmlAttributes buttonHtmlDetails labelledBy selection =
-    Html.div
-        (appendAttributes containerHtmlAttributes [])
-        [ viewButton ids buttonHtmlDetails selection False ]
-
-
 viewButton :
     { id : String
     , labelledBy : String
@@ -451,12 +438,19 @@ viewButton :
     -> Bool
     -> Html (Msg a)
 viewButton ids { attributes, children } selection open =
+    let
+        setAriaExpanded attrs =
+            if open then
+                Widget.expanded True :: attrs
+
+            else
+                attrs
+    in
     Html.button
         ([ Attributes.id (printButtonId ids.id)
          , Attributes.type_ "button"
-         , Attributes.attribute "aria-haspopup" "listbox"
-         , Attributes.attribute "aria-labelledby"
-            (printButtonId ids.id ++ " " ++ ids.labelledBy)
+         , Aria.labelledBy (printButtonId ids.id ++ " " ++ ids.labelledBy)
+         , Widget.hasListBoxPopUp
          , Attributes.style "position" "relative"
          , Attributes.tabindex 0
          , Events.onClick (ButtonClicked ids)
@@ -465,7 +459,7 @@ viewButton ids { attributes, children } selection open =
                 |> Decode.andThen (buttonKeyDown ids)
             )
          ]
-            |> setAriaExpanded open
+            |> setAriaExpanded
             |> appendAttributes attributes
         )
         (List.map (Html.map (\_ -> NoOp)) children)
@@ -487,19 +481,6 @@ buttonKeyDown ids code =
 
         _ ->
             Decode.fail "not handling that key here"
-
-
-
--- VIEW HELPER
-
-
-setAriaExpanded : Bool -> List (Html.Attribute msg) -> List (Html.Attribute msg)
-setAriaExpanded isOpen attrs =
-    if isOpen then
-        Attributes.attribute "aria-expanded" "true" :: attrs
-
-    else
-        attrs
 
 
 

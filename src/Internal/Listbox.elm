@@ -369,7 +369,7 @@ view multiSelectable config instance allEntries listbox selection =
         ([ Attributes.id (printListId id)
          , Role.listBox
          , Aria.labelledBy labelledBy
-         , Widget.multiSelectable True
+         , Widget.multiSelectable multiSelectable
          , Events.preventDefaultOn "keydown" <|
             Decode.andThen
                 (listKeyPress False id >> Decode.map (\msg -> ( lift msg, True )))
