@@ -1,5 +1,6 @@
 module Listbox.Dropdown exposing
-    ( Dropdown, init, view, update, Msg, subscriptions
+    ( Dropdown, init, view, Instance
+    , update, Msg, subscriptions
     , UpdateConfig, updateConfig, Behaviour
     , ViewConfig, viewConfig, Views
     )
@@ -10,7 +11,9 @@ Example](https://www.w3.org/TR/wai-aria-practices-1.1/examples/listbox/listbox-c
 
 TODO: add ellie example
 
-@docs Dropdown, init, view, update, Msg, subscriptions
+@docs Dropdown, init, view, Instance
+
+@docs update, Msg, subscriptions
 
 
 # Configuration
@@ -290,16 +293,24 @@ type alias Behaviour a =
 ---- VIEW
 
 
-{-| Take a list of all entries and a list of selected options and display it as
-a dropdown. You have to provide a `ViewConfig` for the styling and the following
-information:
+{-| To make a dropdown listbox unique in your application you have to provide
+this information to the `view` function:
 
-  - **id**: The unique id of the dropdown.
+  - **id**: The unique id of the listbox.
 
   - **labelledBy**: The unique id of a label element describing the content of
-    the dropdown.
+    the listbox.
 
-For example:
+-}
+type alias Instance =
+    { id : String
+    , labelledBy : String
+    }
+
+
+{-| Take a list of all entries and a list of selected options and display it as
+a dropdown. You have to provide a `ViewConfig` for the styling and an
+`Instance` to uniquely identify this listbox. For example:
 
     view : Dropdown -> Maybe String -> Html Msg
     view dropdown selection =
@@ -325,10 +336,7 @@ For example:
 -}
 view :
     ViewConfig a divider
-    ->
-        { id : String
-        , labelledBy : String
-        }
+    -> Instance
     -> List (Entry a divider)
     -> Dropdown
     -> Maybe a
@@ -407,7 +415,7 @@ view (ViewConfig uniqueId views) ids allEntries (Dropdown data) maybeSelection =
                 )
             ]
         )
-        [ viewButton ids.id buttonHtmlDetails ids.labelledBy maybeSelection True
+        [ viewButton ids buttonHtmlDetails maybeSelection True
         , ListboxUnique.view listboxConfig
             { id = printListboxId ids.id
             , labelledBy = ids.labelledBy
@@ -419,27 +427,42 @@ view (ViewConfig uniqueId views) ids allEntries (Dropdown data) maybeSelection =
         ]
 
 
-viewClosed : String -> HtmlAttributes -> HtmlDetails -> String -> Maybe a -> Html (Msg a)
-viewClosed id containerHtmlAttributes buttonHtmlDetails labelledBy selection =
+viewClosed :
+    { id : String
+    , labelledBy : String
+    }
+    -> HtmlAttributes
+    -> HtmlDetails
+    -> String
+    -> Maybe a
+    -> Html (Msg a)
+viewClosed ids containerHtmlAttributes buttonHtmlDetails labelledBy selection =
     Html.div
         (appendAttributes containerHtmlAttributes [])
-        [ viewButton id buttonHtmlDetails labelledBy selection False ]
+        [ viewButton ids buttonHtmlDetails selection False ]
 
 
-viewButton : String -> HtmlDetails -> String -> Maybe a -> Bool -> Html (Msg a)
-viewButton id { attributes, children } labelledBy selection open =
+viewButton :
+    { id : String
+    , labelledBy : String
+    }
+    -> HtmlDetails
+    -> Maybe a
+    -> Bool
+    -> Html (Msg a)
+viewButton ids { attributes, children } selection open =
     Html.button
-        ([ Attributes.id (printButtonId id)
+        ([ Attributes.id (printButtonId ids.id)
          , Attributes.type_ "button"
          , Attributes.attribute "aria-haspopup" "listbox"
          , Attributes.attribute "aria-labelledby"
-            (printButtonId id ++ " " ++ labelledBy)
+            (printButtonId ids.id ++ " " ++ ids.labelledBy)
          , Attributes.style "position" "relative"
          , Attributes.tabindex 0
-         , Events.onClick (ButtonClicked id)
+         , Events.onClick (ButtonClicked ids)
          , Events.on "keydown"
             (Decode.field "key" Decode.string
-                |> Decode.andThen (buttonKeyDown id)
+                |> Decode.andThen (buttonKeyDown ids)
             )
          ]
             |> setAriaExpanded open
@@ -448,14 +471,19 @@ viewButton id { attributes, children } labelledBy selection open =
         (List.map (Html.map (\_ -> NoOp)) children)
 
 
-buttonKeyDown : String -> String -> Decoder (Msg a)
-buttonKeyDown id code =
+buttonKeyDown :
+    { id : String
+    , labelledBy : String
+    }
+    -> String
+    -> Decoder (Msg a)
+buttonKeyDown ids code =
     case code of
         "ArrowUp" ->
-            Decode.succeed (ButtonArrowUpPressed id)
+            Decode.succeed (ButtonArrowUpPressed ids)
 
         "ArrowDown" ->
-            Decode.succeed (ButtonArrowDownPressed id)
+            Decode.succeed (ButtonArrowDownPressed ids)
 
         _ ->
             Decode.fail "not handling that key here"
@@ -496,11 +524,11 @@ printListboxId id =
 -}
 type Msg a
     = NoOp
-    | NextAnimationFrame
+    | NextAnimationFrame { id : String, labelledBy : String }
       -- BUTTON
-    | ButtonClicked String
-    | ButtonArrowUpPressed String
-    | ButtonArrowDownPressed String
+    | ButtonClicked { id : String, labelledBy : String }
+    | ButtonArrowUpPressed { id : String, labelledBy : String }
+    | ButtonArrowDownPressed { id : String, labelledBy : String }
       -- LISTBOX
     | ListboxMsg (Maybe String) (Listbox.Msg a)
     | ListboxEscapePressed String
@@ -564,7 +592,7 @@ update (UpdateConfig uniqueId behaviour) allEntries msg dropdown maybeSelection 
         NoOp ->
             ( dropdown, Cmd.none, maybeSelection )
 
-        NextAnimationFrame ->
+        NextAnimationFrame ids ->
             case data.pendingFocusListbox of
                 Nothing ->
                     ( dropdown, Cmd.none, maybeSelection )
@@ -572,19 +600,27 @@ update (UpdateConfig uniqueId behaviour) allEntries msg dropdown maybeSelection 
                 Just id ->
                     ( Dropdown { data | pendingFocusListbox = Nothing }
                     , Task.attempt (\_ -> NoOp) <|
-                        Listbox.focus (printListboxId id)
+                        Listbox.focus
+                            { id = printListboxId ids.id
+                            , labelledBy = ids.labelledBy
+                            , lift = ListboxMsg (Just ids.id)
+                            }
                     , maybeSelection
                     )
 
         -- BUTTON
-        ButtonClicked id ->
+        ButtonClicked ids ->
             ( Dropdown { data | open = True }
             , Task.attempt (\_ -> NoOp) <|
-                Listbox.focus (printListboxId id)
+                Listbox.focus
+                    { id = printListboxId ids.id
+                    , labelledBy = ids.labelledBy
+                    , lift = ListboxMsg (Just ids.id)
+                    }
             , maybeSelection
             )
 
-        ButtonArrowUpPressed id ->
+        ButtonArrowUpPressed ids ->
             let
                 ( newListbox, newSelection ) =
                     ListboxUnique.focusPreviousOrFirstEntry listboxConfig
@@ -601,14 +637,18 @@ update (UpdateConfig uniqueId behaviour) allEntries msg dropdown maybeSelection 
                             Nothing
 
                         else
-                            Just id
+                            Just ids.id
                 }
             , Task.attempt (\_ -> NoOp) <|
-                Listbox.focus (printListboxId id)
+                Listbox.focus
+                    { id = printListboxId ids.id
+                    , labelledBy = ids.labelledBy
+                    , lift = ListboxMsg (Just ids.id)
+                    }
             , newSelection
             )
 
-        ButtonArrowDownPressed id ->
+        ButtonArrowDownPressed ids ->
             let
                 ( newListbox, newSelection ) =
                     ListboxUnique.focusNextOrFirstEntry listboxConfig
@@ -625,10 +665,14 @@ update (UpdateConfig uniqueId behaviour) allEntries msg dropdown maybeSelection 
                             Nothing
 
                         else
-                            Just id
+                            Just ids.id
                 }
             , Task.attempt (\_ -> NoOp) <|
-                Listbox.focus (printListboxId id)
+                Listbox.focus
+                    { id = printListboxId ids.id
+                    , labelledBy = ids.labelledBy
+                    , lift = ListboxMsg (Just ids.id)
+                    }
             , newSelection
             )
 

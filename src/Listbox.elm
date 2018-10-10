@@ -109,19 +109,20 @@ import Time exposing (Posix)
 {-| Tracks the keyboard and mouse focus as well as the current query. The full
 list of entries and the currently selected option(s) live in your own model.
 -}
-type Listbox
-    = Listbox Internal.Listbox
+type alias Listbox =
+    Internal.Listbox
 
 
 {-| An initial listbox with no option focused.
 -}
 init : Listbox
 init =
-    Listbox Internal.init
+    Internal.init
 
 
 {-| When updating or viewing a listbox you have to provide a list of entries.
-These can be selectable options or non-selectable dividers.
+These can be selectable options or non-selectable dividers. You can construct
+these using `option` and `divider`.
 -}
 type alias Entry a divider =
     Internal.Entry a divider
@@ -145,25 +146,25 @@ divider =
 ---- EXTERNAL STATE MANIPULATION
 
 
-{-| A task to give the listbox focus. The first argument must match the `id`
-used in the `view` function!
+{-| A task to give the listbox focus. The first argument must match the
+`Instance` used in the `view` function!
 -}
-focus : String -> Task Dom.Error ()
-focus id =
+focus : Instance a msg -> Task Dom.Error ()
+focus { id } =
     Dom.focus (Internal.printListId id)
 
 
 {-| Returns the option which currently has keyboard focus.
 -}
 focusedEntry : UpdateConfig a -> Listbox -> List (Entry a divider) -> Maybe a
-focusedEntry (UpdateConfig config) (Listbox listbox) =
+focusedEntry config listbox =
     Internal.focusedEntry config listbox
 
 
 {-| Returns the option which currently has mouse focus.
 -}
 hoveredEntry : UpdateConfig a -> Listbox -> List (Entry a divider) -> Maybe a
-hoveredEntry (UpdateConfig config) (Listbox listbox) =
+hoveredEntry config listbox =
     Internal.hoveredEntry config listbox
 
 
@@ -174,9 +175,8 @@ want to apply `scrollToFocus` afterwards.
 
 -}
 focusEntry : UpdateConfig a -> a -> Listbox -> List a -> ( Listbox, List a )
-focusEntry (UpdateConfig config) newEntry (Listbox listbox) selection =
+focusEntry config newEntry listbox selection =
     Internal.focusEntry config newEntry listbox selection
-        |> Tuple.mapFirst Listbox
 
 
 {-| Sets the keyboard focus to the next option. If `jumpAtEnds` is true and the
@@ -192,9 +192,8 @@ focusNextOrFirstEntry :
     -> Listbox
     -> List a
     -> ( Listbox, List a )
-focusNextOrFirstEntry (UpdateConfig config) allEntries (Listbox listbox) selection =
+focusNextOrFirstEntry config allEntries listbox selection =
     Internal.focusNextOrFirstEntry config allEntries listbox selection
-        |> Tuple.mapFirst Listbox
 
 
 {-| Sets the keyboard focus to the previous option. If `jumpAtEnds` is true and the
@@ -210,17 +209,16 @@ focusPreviousOrFirstEntry :
     -> Listbox
     -> List a
     -> ( Listbox, List a )
-focusPreviousOrFirstEntry (UpdateConfig config) allEntries (Listbox listbox) selection =
+focusPreviousOrFirstEntry config allEntries listbox selection =
     Internal.focusPreviousOrFirstEntry config allEntries listbox selection
-        |> Tuple.mapFirst Listbox
 
 
 {-| A command adjusting the scroll position of the listbox such that the
 current keyboard focus is visible.
 -}
-scrollToFocus : String -> Listbox -> Cmd (Msg a)
-scrollToFocus id (Listbox listbox) =
-    perform (Internal.scrollToFocus id listbox)
+scrollToFocus : Instance a msg -> Listbox -> Cmd msg
+scrollToFocus { id, lift } listbox =
+    Cmd.map lift (perform (Internal.scrollToFocus id listbox))
 
 
 
@@ -228,8 +226,8 @@ scrollToFocus id (Listbox listbox) =
 
 
 {-| -}
-type ViewConfig a divider
-    = ViewConfig (Internal.ViewConfig a divider)
+type alias ViewConfig a divider =
+    Internal.ViewConfig a divider
 
 
 {-| Generate a `ViewConfig` by providing a hash function for the entries and
@@ -237,11 +235,8 @@ a `Views` record, which holds all the styling information. You usually do
 **not** want to store this inside your model.
 -}
 viewConfig : (a -> String) -> Views a divider -> ViewConfig a divider
-viewConfig uniqueId views =
-    ViewConfig
-        { uniqueId = uniqueId
-        , views = views
-        }
+viewConfig =
+    Internal.ViewConfig
 
 
 {-| **Available view customizations**
@@ -354,19 +349,16 @@ type alias HtmlDetails =
 
 
 {-| -}
-type UpdateConfig a
-    = UpdateConfig (Internal.UpdateConfig a)
+type alias UpdateConfig a =
+    Internal.UpdateConfig a
 
 
 {-| Generate an `UpdateConfig` by providing a hash function for the entries and
 a `Behaviour` record.
 -}
 updateConfig : (a -> String) -> Behaviour a -> UpdateConfig a
-updateConfig uniqueId behaviour =
-    UpdateConfig
-        { uniqueId = uniqueId
-        , behaviour = behaviour
-        }
+updateConfig =
+    Internal.UpdateConfig
 
 
 {-| **Available behaviour customizations**
@@ -476,15 +468,8 @@ typeAhead =
 ---- VIEW
 
 
-{-| TODO
--}
-type alias Instance a msg =
-    Internal.Instance a msg
-
-
-{-| Take a list of all entries and a list of selected options and display it as
-a listbox. You have to provide a `ViewConfig` for the styling and the following
-information:
+{-| To make a listbox unique in your application you have to provide this
+information to the `view` function:
 
   - **id**: The unique id of the listbox.
 
@@ -493,7 +478,17 @@ information:
 
   - **lift**: Your message type constructor wrapping the listbox `Msg`'s.
 
-For example:
+-}
+type alias Instance a msg =
+    { id : String
+    , labelledBy : String
+    , lift : Msg a -> msg
+    }
+
+
+{-| Take a list of all entries and a list of selected options and display it as
+a listbox. You have to provide a `ViewConfig` for the styling and an `Instance`
+to uniquely identify this listbox. For example:
 
     view : Listbox -> List String -> Html Msg
     view listbox selection =
@@ -524,8 +519,8 @@ view :
     -> Listbox
     -> List a
     -> Html msg
-view (ViewConfig config) instance allEntries (Listbox listbox) selection =
-    Internal.view config instance allEntries listbox selection
+view config instance allEntries listbox selection =
+    Internal.view True config instance allEntries listbox selection
 
 
 {-| This adds all the keydown event listener needed for the listbox on any DOM
@@ -553,10 +548,7 @@ listbox's focus although the listbox itself is not focused.
 
 -}
 preventDefaultOnKeyDown :
-    { id : String
-    , labelledBy : String
-    , lift : Msg a -> msg
-    }
+    Instance a msg
     -> Decoder ( msg, Bool )
     -> Html.Attribute msg
 preventDefaultOnKeyDown =
@@ -574,7 +566,7 @@ type alias Msg a =
 
 
 {-| Use this function to update the listbox state. You have to provide the same
-entries and selection as to your view function.
+entries and selection as given to your view function.
 
 For example:
 
@@ -596,7 +588,7 @@ For example:
                 , Cmd.map ListboxMsg listboxCmd
                 )
 
-In a more sofisticated example, the entries could be dynamic, as well. (For
+In a more sophisticated example, the entries could be dynamic, as well. (For
 example, loaded via an HTTP request.)
 
 -}
@@ -607,12 +599,12 @@ update :
     -> Listbox
     -> List a
     -> ( Listbox, Cmd (Msg a), List a )
-update (UpdateConfig config) entries msg (Listbox listbox) selection =
+update config entries msg listbox selection =
     let
         ( newListbox, effect, newSelection ) =
             Internal.update config entries msg listbox selection
     in
-    ( Listbox newListbox, perform effect, newSelection )
+    ( newListbox, perform effect, newSelection )
 
 
 perform : Internal.Effect a -> Cmd (Msg a)
@@ -712,5 +704,5 @@ apply f a =
 
 -}
 subscriptions : Listbox -> Sub (Msg a)
-subscriptions (Listbox listbox) =
+subscriptions listbox =
     Internal.subscriptions listbox

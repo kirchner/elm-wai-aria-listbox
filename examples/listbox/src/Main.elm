@@ -18,6 +18,7 @@ module Main exposing (main)
 
 -}
 
+import Accessibility.Widget as Widget
 import Browser
 import Html exposing (Html)
 import Html.Attributes as Attributes
@@ -181,6 +182,7 @@ viewConfig =
                         , Attributes.style "margin-left" "8px"
                         , Attributes.style "font-size" "12px"
                         , Attributes.style "width" "16px"
+                        , Widget.hidden True
                         ]
                         [ if selected then
                             Html.i

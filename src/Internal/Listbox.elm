@@ -322,13 +322,14 @@ type alias Instance a msg =
 
 
 view :
-    ViewConfig a divider
+    Bool
+    -> ViewConfig a divider
     -> Instance a msg
     -> List (Entry a divider)
     -> Listbox
     -> List a
     -> Html msg
-view config instance allEntries listbox selection =
+view multiSelectable config instance allEntries listbox selection =
     let
         { id, lift, labelledBy } =
             instance
@@ -343,7 +344,8 @@ view config instance allEntries listbox selection =
                         maybeHash =
                             Just (uniqueId option)
                     in
-                    Html.lazy7 viewEntry
+                    Html.lazy8 viewEntry
+                        multiSelectable
                         (listbox.focus == maybeHash)
                         (listbox.hover == maybeHash)
                         (List.any ((==) option) selection)
@@ -353,7 +355,8 @@ view config instance allEntries listbox selection =
                         entry
 
                 Divider _ ->
-                    Html.lazy7 viewEntry
+                    Html.lazy8 viewEntry
+                        multiSelectable
                         False
                         False
                         False
@@ -366,6 +369,7 @@ view config instance allEntries listbox selection =
         ([ Attributes.id (printListId id)
          , Role.listBox
          , Aria.labelledBy labelledBy
+         , Widget.multiSelectable True
          , Events.preventDefaultOn "keydown" <|
             Decode.andThen
                 (listKeyPress False id >> Decode.map (\msg -> ( lift msg, True )))
@@ -386,13 +390,20 @@ viewEntry :
     Bool
     -> Bool
     -> Bool
+    -> Bool
     -> ViewConfig a divider
     -> Instance a msg
     -> Query
     -> Entry a divider
     -> Html msg
-viewEntry focused hovered selected { uniqueId, views } { id, lift } query entry =
+viewEntry multiSelectable focused hovered selected config instance query entry =
     let
+        { uniqueId, views } =
+            config
+
+        { id, lift } =
+            instance
+
         maybeQuery =
             case query of
                 NoQuery ->
@@ -419,8 +430,11 @@ viewEntry focused hovered selected { uniqueId, views } { id, lift } query entry 
                         }
                         option
 
-                setAriaSelected attrs =
-                    if selected then
+                addWidgetSelected attrs =
+                    if multiSelectable then
+                        Widget.selected selected :: attrs
+
+                    else if selected then
                         Widget.selected True :: attrs
 
                     else
@@ -433,7 +447,7 @@ viewEntry focused hovered selected { uniqueId, views } { id, lift } query entry 
                  , Attributes.id (printEntryId id hash)
                  , Role.option
                  ]
-                    |> setAriaSelected
+                    |> addWidgetSelected
                     |> appendAttributes lift attributes
                 )
                 (mapNever children)

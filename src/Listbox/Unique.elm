@@ -34,6 +34,7 @@ TODO: link to ellie example
 -}
 
 import Html exposing (Html)
+import Internal.Listbox as Internal
 import Json.Decode exposing (Decoder)
 import Listbox exposing (Entry, Listbox, Msg, UpdateConfig, ViewConfig)
 
@@ -55,7 +56,7 @@ view :
     -> Maybe a
     -> Html msg
 view config cfg entries listbox selection =
-    Listbox.view config cfg entries listbox (maybeToList selection)
+    Internal.view False config cfg entries listbox (maybeToList selection)
 
 
 {-| Use this function instead of `Listbox.update` if the user can only
