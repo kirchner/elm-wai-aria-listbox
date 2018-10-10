@@ -117,10 +117,7 @@ view model =
                 , Html.div
                     [ Attributes.class "control" ]
                     [ Listbox.view viewConfig
-                        { id = "fruits"
-                        , labelledBy = "fruits-label"
-                        , lift = ListboxMsg
-                        }
+                        customization
                         fruits
                         model.listbox
                         model.selection
@@ -137,6 +134,13 @@ view model =
                 ]
             ]
         ]
+
+
+customization =
+    { id = "fruits"
+    , labelledBy = "fruits-label"
+    , lift = ListboxMsg
+    }
 
 
 

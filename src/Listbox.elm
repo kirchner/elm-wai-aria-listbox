@@ -1,5 +1,5 @@
 module Listbox exposing
-    ( Listbox, init, view
+    ( Listbox, init, view, Instance
     , Entry, option, divider
     , update, Msg, subscriptions
     , UpdateConfig, updateConfig, Behaviour
@@ -24,7 +24,7 @@ TODO: link to ellie example
 Take a look at the documentation of `Behaviour` for the default keyboard
 interactions this widget offers.
 
-@docs Listbox, init, view
+@docs Listbox, init, view, Instance
 
 @docs Entry, option, divider
 
@@ -476,6 +476,12 @@ typeAhead =
 ---- VIEW
 
 
+{-| TODO
+-}
+type alias Instance a msg =
+    Internal.Instance a msg
+
+
 {-| Take a list of all entries and a list of selected options and display it as
 a listbox. You have to provide a `ViewConfig` for the styling and the following
 information:
@@ -513,24 +519,13 @@ For example:
 -}
 view :
     ViewConfig a divider
-    ->
-        { id : String
-        , labelledBy : String
-        , lift : Msg a -> msg
-        }
+    -> Instance a msg
     -> List (Entry a divider)
     -> Listbox
     -> List a
     -> Html msg
-view (ViewConfig config) { id, labelledBy, lift } allEntries (Listbox listbox) selection =
-    let
-        internalCfg =
-            { id = id
-            , labelledBy = labelledBy
-            , lift = Msg >> lift
-            }
-    in
-    Internal.view config internalCfg allEntries listbox selection
+view (ViewConfig config) instance allEntries (Listbox listbox) selection =
+    Internal.view config instance allEntries listbox selection
 
 
 {-| This adds all the keydown event listener needed for the listbox on any DOM
@@ -564,38 +559,8 @@ preventDefaultOnKeyDown :
     }
     -> Decoder ( msg, Bool )
     -> Html.Attribute msg
-preventDefaultOnKeyDown { id, labelledBy, lift } =
+preventDefaultOnKeyDown =
     Internal.preventDefaultOnKeyDown
-        { id = id
-        , labelledBy = labelledBy
-        , lift = Msg >> lift
-        }
-
-
-{-| TODO
--}
-viewLazy :
-    (a -> Float)
-    -> (divider -> Float)
-    -> ViewConfig a divider
-    ->
-        { id : String
-        , labelledBy : String
-        , lift : Msg a -> msg
-        }
-    -> List (Entry a divider)
-    -> Listbox
-    -> List a
-    -> Html msg
-viewLazy entryHeight dividerHeight (ViewConfig config) cfg allEntries (Listbox listbox) selection =
-    let
-        internalCfg =
-            { id = cfg.id
-            , labelledBy = cfg.labelledBy
-            , lift = Msg >> cfg.lift
-            }
-    in
-    Internal.viewLazy entryHeight dividerHeight config internalCfg allEntries listbox selection
 
 
 
@@ -604,8 +569,8 @@ viewLazy entryHeight dividerHeight (ViewConfig config) cfg allEntries (Listbox l
 
 {-| The listbox's message type.
 -}
-type Msg a
-    = Msg (Internal.Msg a)
+type alias Msg a =
+    Internal.Msg a
 
 
 {-| Use this function to update the listbox state. You have to provide the same
@@ -642,7 +607,7 @@ update :
     -> Listbox
     -> List a
     -> ( Listbox, Cmd (Msg a), List a )
-update (UpdateConfig config) entries (Msg msg) (Listbox listbox) selection =
+update (UpdateConfig config) entries msg (Listbox listbox) selection =
     let
         ( newListbox, effect, newSelection ) =
             Internal.update config entries msg listbox selection
@@ -652,78 +617,77 @@ update (UpdateConfig config) entries (Msg msg) (Listbox listbox) selection =
 
 perform : Internal.Effect a -> Cmd (Msg a)
 perform effect =
-    Cmd.map Msg <|
-        case effect of
-            Internal.CmdNone ->
-                Cmd.none
+    case effect of
+        Internal.CmdNone ->
+            Cmd.none
 
-            Internal.TimeNow toMsg ->
-                Task.perform toMsg Time.now
+        Internal.TimeNow toMsg ->
+            Task.perform toMsg Time.now
 
-            Internal.DomSetViewportOf id x y ->
-                Task.attempt (\_ -> Internal.NoOp) <|
-                    Dom.setViewportOf id x y
+        Internal.DomSetViewportOf id x y ->
+            Task.attempt (\_ -> Internal.NoOp) <|
+                Dom.setViewportOf id x y
 
-            Internal.DomFocus id ->
-                Task.attempt (\_ -> Internal.NoOp) <|
-                    Dom.focus id
+        Internal.DomFocus id ->
+            Task.attempt (\_ -> Internal.NoOp) <|
+                Dom.focus id
 
-            Internal.ScrollListToTop toMsg id ->
-                Task.succeed toMsg
-                    |> and (Dom.getViewportOf (Internal.printListId id))
-                    |> Task.attempt
-                        (\result ->
-                            case result of
-                                Err _ ->
-                                    Internal.NoOp
+        Internal.ScrollListToTop toMsg id ->
+            Task.succeed toMsg
+                |> and (Dom.getViewportOf (Internal.printListId id))
+                |> Task.attempt
+                    (\result ->
+                        case result of
+                            Err _ ->
+                                Internal.NoOp
 
-                                Ok msg ->
-                                    msg
-                        )
+                            Ok msg ->
+                                msg
+                    )
 
-            Internal.ScrollListToBottom toMsg id ->
-                Task.succeed toMsg
-                    |> and (Dom.getViewportOf (Internal.printListId id))
-                    |> Task.attempt
-                        (\result ->
-                            case result of
-                                Err _ ->
-                                    Internal.NoOp
+        Internal.ScrollListToBottom toMsg id ->
+            Task.succeed toMsg
+                |> and (Dom.getViewportOf (Internal.printListId id))
+                |> Task.attempt
+                    (\result ->
+                        case result of
+                            Err _ ->
+                                Internal.NoOp
 
-                                Ok msg ->
-                                    msg
-                        )
+                            Ok msg ->
+                                msg
+                    )
 
-            Internal.AdjustScrollTop toMsg id entryId ->
-                Task.map3 Internal.InitialEntryDomData
-                    (Dom.getViewportOf (Internal.printListId id))
-                    (Dom.getElement (Internal.printListId id))
-                    (Dom.getElement (Internal.printEntryId id entryId))
-                    |> Task.attempt
-                        (\result ->
-                            case result of
-                                Err _ ->
-                                    Internal.NoOp
+        Internal.AdjustScrollTop toMsg id entryId ->
+            Task.map3 Internal.InitialEntryDomData
+                (Dom.getViewportOf (Internal.printListId id))
+                (Dom.getElement (Internal.printListId id))
+                (Dom.getElement (Internal.printEntryId id entryId))
+                |> Task.attempt
+                    (\result ->
+                        case result of
+                            Err _ ->
+                                Internal.NoOp
 
-                                Ok initialEntryDomData ->
-                                    toMsg initialEntryDomData
-                        )
+                            Ok initialEntryDomData ->
+                                toMsg initialEntryDomData
+                    )
 
-            Internal.AdjustScrollTopNew toMsg id entryId previousEntryId ->
-                Task.map4 Internal.EntryDomData
-                    (Dom.getViewportOf (Internal.printListId id))
-                    (Dom.getElement (Internal.printListId id))
-                    (Dom.getElement (Internal.printEntryId id entryId))
-                    (Dom.getElement (Internal.printEntryId id previousEntryId))
-                    |> Task.attempt
-                        (\result ->
-                            case result of
-                                Err _ ->
-                                    Internal.NoOp
+        Internal.AdjustScrollTopNew toMsg id entryId previousEntryId ->
+            Task.map4 Internal.EntryDomData
+                (Dom.getViewportOf (Internal.printListId id))
+                (Dom.getElement (Internal.printListId id))
+                (Dom.getElement (Internal.printEntryId id entryId))
+                (Dom.getElement (Internal.printEntryId id previousEntryId))
+                |> Task.attempt
+                    (\result ->
+                        case result of
+                            Err _ ->
+                                Internal.NoOp
 
-                                Ok entryDomData ->
-                                    toMsg entryDomData
-                        )
+                            Ok entryDomData ->
+                                toMsg entryDomData
+                    )
 
 
 and : Task x a -> Task x (a -> b) -> Task x b
@@ -749,4 +713,4 @@ apply f a =
 -}
 subscriptions : Listbox -> Sub (Msg a)
 subscriptions (Listbox listbox) =
-    Sub.map Msg (Internal.subscriptions listbox)
+    Internal.subscriptions listbox

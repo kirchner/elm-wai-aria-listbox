@@ -4,6 +4,7 @@ module Internal.Listbox exposing
     , Entry(..)
     , EntryDomData
     , InitialEntryDomData
+    , Instance
     , Listbox
     , Msg(..)
     , Query(..)
@@ -11,6 +12,7 @@ module Internal.Listbox exposing
     , UpdateConfig
     , ViewConfig
     , Views
+    , find
     , focusEntry
     , focusNextOrFirstEntry
     , focusPreviousOrFirstEntry
@@ -26,16 +28,18 @@ module Internal.Listbox exposing
     , subscriptions
     , update
     , view
-    , viewLazy
     )
 
 import Accessibility.Aria as Aria
 import Accessibility.Role as Role
 import Accessibility.Widget as Widget
 import Browser.Dom as Dom
+import Dict
 import Html exposing (Html)
 import Html.Attributes as Attributes
 import Html.Events as Events
+import Html.Keyed
+import Html.Lazy as Html
 import Internal.KeyInfo as KeyInfo exposing (KeyInfo)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Decode.Pipeline as Decode
@@ -308,7 +312,7 @@ type TypeAhead a
 ---- VIEW
 
 
-type alias Customization a msg =
+type alias Instance a msg =
     { id : String
     , labelledBy : String
     , lift : Msg a -> msg
@@ -317,75 +321,44 @@ type alias Customization a msg =
 
 view :
     ViewConfig a divider
-    -> Customization a msg
+    -> Instance a msg
     -> List (Entry a divider)
     -> Listbox
     -> List a
     -> Html msg
-view { uniqueId, views } customization allEntries listbox selection =
-    let
-        renderedEntries =
-            { spaceAboveFirst = 0
-            , droppedAboveFirst = 0
-            , spaceAboveSecond = 0
-            , droppedAboveSecond = 0
-            , spaceBelowFirst = 0
-            , droppedBelowFirst = 0
-            , spaceBelowSecond = 0
-            , droppedBelowSecond = 0
-            , entriesAbove = []
-            , visibleEntries = allEntries
-            , entriesBelow = []
-            }
-    in
-    viewHelp renderedEntries uniqueId views customization allEntries listbox selection
-
-
-viewLazy :
-    (a -> Float)
-    -> (divider -> Float)
-    -> ViewConfig a divider
-    -> Customization a msg
-    -> List (Entry a divider)
-    -> Listbox
-    -> List a
-    -> Html msg
-viewLazy entryHeight dividerHeight { uniqueId, views } cfg allEntries listbox selection =
-    let
-        { ulScrollTop, ulClientHeight } =
-            listbox
-
-        renderedEntries =
-            computeRenderedEntries
-                entryHeight
-                dividerHeight
-                ulScrollTop
-                ulClientHeight
-                maybeFocusIndex
-                allEntries
-
-        maybeFocusIndex =
-            Maybe.andThen (indexOf uniqueId allEntries) listbox.focus
-    in
-    viewHelp renderedEntries uniqueId views cfg allEntries listbox selection
-
-
-viewHelp :
-    RenderedEntries a divider
-    -> (a -> String)
-    -> Views a divider
-    -> Customization a msg
-    -> List (Entry a divider)
-    -> Listbox
-    -> List a
-    -> Html msg
-viewHelp renderedEntries uniqueId views customization allEntries listbox selection =
+view config instance allEntries listbox selection =
     let
         { id, lift, labelledBy } =
-            customization
+            instance
 
-        viewEntries =
-            List.map (viewEntry uniqueId views customization listbox selection)
+        { uniqueId, views } =
+            config
+
+        viewEntryHelp entry =
+            case entry of
+                Option option ->
+                    let
+                        maybeHash =
+                            Just (uniqueId option)
+                    in
+                    Html.lazy7 viewEntry
+                        (listbox.focus == maybeHash)
+                        (listbox.hover == maybeHash)
+                        (List.any ((==) option) selection)
+                        config
+                        instance
+                        listbox.query
+                        entry
+
+                Divider _ ->
+                    Html.lazy7 viewEntry
+                        False
+                        False
+                        False
+                        config
+                        instance
+                        listbox.query
+                        entry
     in
     Html.ul
         ([ Attributes.id (printListId id)
@@ -404,34 +377,80 @@ viewHelp renderedEntries uniqueId views customization allEntries listbox selecti
             |> setTabindex views.focusable
             |> appendAttributes lift views.ul
         )
-        (List.concat
-            [ spacer renderedEntries.spaceAboveFirst
-            , viewEntries renderedEntries.entriesAbove
-            , spacer renderedEntries.spaceAboveSecond
-            , viewEntries renderedEntries.visibleEntries
-            , spacer renderedEntries.spaceBelowFirst
-            , viewEntries renderedEntries.entriesBelow
-            , spacer renderedEntries.spaceBelowSecond
-            ]
-        )
+        (List.map viewEntryHelp allEntries)
 
 
-preventDefaultOnKeyDown : Customization a msg -> Decoder ( msg, Bool ) -> Html.Attribute msg
-preventDefaultOnKeyDown { id, lift } keyDownDecoder =
-    Events.preventDefaultOn "keydown" <|
-        Decode.oneOf
-            [ keyDownDecoder
-            , Decode.andThen
-                (listKeyPress True id >> Decode.map (\msg -> ( lift msg, True )))
-                KeyInfo.decoder
-            ]
+viewEntry :
+    Bool
+    -> Bool
+    -> Bool
+    -> ViewConfig a divider
+    -> Instance a msg
+    -> Query
+    -> Entry a divider
+    -> Html msg
+viewEntry focused hovered selected { uniqueId, views } { id, lift } query entry =
+    let
+        maybeQuery =
+            case query of
+                NoQuery ->
+                    Nothing
+
+                Query _ _ text ->
+                    Just text
+
+        mapNever =
+            List.map (Html.map (\_ -> lift NoOp))
+    in
+    case entry of
+        Option option ->
+            let
+                hash =
+                    uniqueId option
+
+                { attributes, children } =
+                    views.liOption
+                        { selected = selected
+                        , focused = focused
+                        , hovered = hovered
+                        , maybeQuery = maybeQuery
+                        }
+                        option
+
+                setAriaSelected attrs =
+                    if selected then
+                        Widget.selected True :: attrs
+
+                    else
+                        attrs
+            in
+            Html.li
+                ([ Events.onMouseEnter (lift (EntryMouseEntered hash))
+                 , Events.onMouseLeave (lift EntryMouseLeft)
+                 , Events.onClick (lift (EntryClicked option))
+                 , Attributes.id (printEntryId id hash)
+                 , Role.option
+                 ]
+                    |> setAriaSelected
+                    |> appendAttributes lift attributes
+                )
+                (mapNever children)
+
+        Divider d ->
+            let
+                { attributes, children } =
+                    views.liDivider d
+            in
+            Html.li
+                (appendAttributes lift attributes [])
+                (mapNever children)
 
 
 listKeyPress : Bool -> String -> KeyInfo -> Decoder (Msg a)
 listKeyPress fromOutside id { code, altDown, controlDown, metaDown, shiftDown } =
     let
         noModifierDown =
-            not altDown && not controlDown && not metaDown && not shiftDown
+            not (altDown || controlDown || metaDown || shiftDown)
 
         onlyShiftDown =
             not altDown && not controlDown && not metaDown && shiftDown
@@ -530,83 +549,15 @@ listKeyPress fromOutside id { code, altDown, controlDown, metaDown, shiftDown } 
                 notHandlingThatKey
 
 
-viewEntry :
-    (a -> String)
-    -> Views a divider
-    -> Customization a msg
-    -> Listbox
-    -> List a
-    -> Entry a divider
-    -> Html msg
-viewEntry uniqueId config { id, lift } listbox selection entry =
-    let
-        mapNever =
-            List.map (Html.map (\_ -> lift NoOp))
-    in
-    case entry of
-        Option option ->
-            let
-                hash =
-                    uniqueId option
-
-                selected =
-                    List.any ((==) option) selection
-
-                { attributes, children } =
-                    config.liOption
-                        { selected = selected
-                        , focused = listbox.focus == Just hash
-                        , hovered = listbox.hover == Just hash
-                        , maybeQuery =
-                            case listbox.query of
-                                NoQuery ->
-                                    Nothing
-
-                                Query _ _ query ->
-                                    Just query
-                        }
-                        option
-
-                setAriaSelected attrs =
-                    if selected then
-                        Widget.selected True :: attrs
-
-                    else
-                        attrs
-            in
-            Html.li
-                ([ Events.onMouseEnter (lift (EntryMouseEntered hash))
-                 , Events.onMouseLeave (lift EntryMouseLeft)
-                 , Events.onClick (lift (EntryClicked option))
-                 , Attributes.id (printEntryId id hash)
-                 , Role.option
-                 ]
-                    |> setAriaSelected
-                    |> appendAttributes lift attributes
-                )
-                (mapNever children)
-
-        Divider d ->
-            let
-                { attributes, children } =
-                    config.liDivider d
-            in
-            Html.li
-                (appendAttributes lift attributes [])
-                (mapNever children)
-
-
-spacer : Float -> List (Html msg)
-spacer height =
-    [ Html.li
-        (if height == 0 then
-            [ Attributes.style "display" "none" ]
-
-         else
-            [ Attributes.style "height" (String.fromFloat height ++ "px") ]
-        )
-        []
-    ]
+preventDefaultOnKeyDown : Instance a msg -> Decoder ( msg, Bool ) -> Html.Attribute msg
+preventDefaultOnKeyDown { id, lift } keyDownDecoder =
+    Events.preventDefaultOn "keydown" <|
+        Decode.oneOf
+            [ keyDownDecoder
+            , Decode.andThen
+                (listKeyPress True id >> Decode.map (\msg -> ( lift msg, True )))
+                KeyInfo.decoder
+            ]
 
 
 
@@ -1706,151 +1657,3 @@ rangeHelp uniqueId collected end entries =
 
             else
                 rangeHelp uniqueId (a :: collected) end rest
-
-
-
----- COMPUTE RENDERED ENTRIES
-
-
-type alias RenderedEntries a divider =
-    { spaceAboveFirst : Float
-    , droppedAboveFirst : Int
-    , spaceAboveSecond : Float
-    , droppedAboveSecond : Int
-    , spaceBelowFirst : Float
-    , droppedBelowFirst : Int
-    , spaceBelowSecond : Float
-    , droppedBelowSecond : Int
-    , entriesAbove : List (Entry a divider)
-    , visibleEntries : List (Entry a divider)
-    , entriesBelow : List (Entry a divider)
-    }
-
-
-computeRenderedEntries :
-    (a -> Float)
-    -> (divider -> Float)
-    -> Float
-    -> Float
-    -> Maybe Int
-    -> List (Entry a divider)
-    -> RenderedEntries a divider
-computeRenderedEntries entryHeight dividerHeight ulScrollTop ulClientHeight maybeFocusIndex entries =
-    --let
-    --    initialRenderedEntries =
-    --        { spaceAboveFirst = 0
-    --        , droppedAboveFirst = 0
-    --        , spaceAboveSecond = 0
-    --        , droppedAboveSecond = 0
-    --        , spaceBelowFirst = 0
-    --        , droppedBelowFirst = 0
-    --        , spaceBelowSecond = 0
-    --        , droppedBelowSecond = 0
-    --        , entriesAbove = []
-    --        , visibleEntries = []
-    --        , entriesBelow = []
-    --        }
-    --    withoutIndex e currentHeight data =
-    --        let
-    --            height =
-    --                entryHeight e
-    --        in
-    --        if currentHeight < ulScrollTop - 200 then
-    --            -- entry is above the rendered range
-    --            { data
-    --                | spaceAboveFirst = data.spaceAboveFirst + height
-    --                , droppedAboveFirst = data.droppedAboveFirst + 1
-    --            }
-    --        else if currentHeight >= (ulScrollTop + ulClientHeight + 200) then
-    --            { data
-    --                | spaceBelowFirst = data.spaceBelowFirst + height
-    --                , droppedBelowFirst = data.droppedBelowFirst + 1
-    --            }
-    --        else
-    --            -- entry is within the rendered range
-    --            { data | visibleEntries = e :: data.visibleEntries }
-    --    withIndex index currentIndex e currentHeight data =
-    --        let
-    --            height =
-    --                entryHeight e
-    --        in
-    --        if currentHeight < ulScrollTop - 200 then
-    --            -- entry is above the rendered range
-    --            if currentIndex < index - 1 then
-    --                -- entry is before focused entry
-    --                { data
-    --                    | spaceAboveFirst = data.spaceAboveFirst + height
-    --                    , droppedAboveFirst = data.droppedAboveFirst + 1
-    --                }
-    --            else if currentIndex > index + 1 then
-    --                -- entry is after focused entry
-    --                { data
-    --                    | spaceAboveSecond = data.spaceAboveSecond + height
-    --                    , droppedAboveSecond = data.droppedAboveSecond + 1
-    --                }
-    --            else
-    --                -- entry is focused or next to focused entry
-    --                { data | entriesAbove = e :: data.entriesAbove }
-    --        else if currentHeight > (ulScrollTop + ulClientHeight + 200) then
-    --            -- entry is below the rendered range
-    --            if currentIndex < index - 1 then
-    --                -- entry is before focused entry
-    --                { data
-    --                    | spaceBelowFirst = data.spaceBelowFirst + height
-    --                    , droppedBelowFirst = data.droppedBelowFirst + 1
-    --                }
-    --            else if currentIndex > index + 1 then
-    --                -- entry is after focused entry
-    --                { data
-    --                    | spaceBelowSecond = data.spaceBelowSecond + height
-    --                    , droppedBelowSecond = data.droppedBelowSecond + 1
-    --                }
-    --            else
-    --                -- entry is focused or next to focused entry
-    --                { data | entriesBelow = e :: data.entriesBelow }
-    --        else
-    --            -- entry is within the rendered range
-    --            { data | visibleEntries = e :: data.visibleEntries }
-    --    reverseLists renderedEntries =
-    --        { renderedEntries
-    --            | entriesAbove = List.reverse renderedEntries.entriesAbove
-    --            , visibleEntries = List.reverse renderedEntries.visibleEntries
-    --            , entriesBelow = List.reverse renderedEntries.entriesBelow
-    --        }
-    --in
-    --reverseLists <|
-    --    case maybeFocusIndex of
-    --        Nothing ->
-    --            entries
-    --                |> List.foldl
-    --                    (\e ( currentHeight, data ) ->
-    --                        ( currentHeight + entryHeight e
-    --                        , withoutIndex e currentHeight data
-    --                        )
-    --                    )
-    --                    ( 0, initialRenderedEntries )
-    --                |> Tuple.second
-    --        Just index ->
-    --            entries
-    --                |> List.foldl
-    --                    (\e ( ( currentIndex, currentHeight ), data ) ->
-    --                        ( ( currentIndex + 1
-    --                          , currentHeight + entryHeight e
-    --                          )
-    --                        , withIndex index currentIndex e currentHeight data
-    --                        )
-    --                    )
-    --                    ( ( 0, 0 ), initialRenderedEntries )
-    --                |> Tuple.second
-    { spaceAboveFirst = 0
-    , droppedAboveFirst = 0
-    , spaceAboveSecond = 0
-    , droppedAboveSecond = 0
-    , spaceBelowFirst = 0
-    , droppedBelowFirst = 0
-    , spaceBelowSecond = 0
-    , droppedBelowSecond = 0
-    , entriesAbove = []
-    , visibleEntries = entries
-    , entriesBelow = []
-    }
