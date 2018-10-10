@@ -169,12 +169,30 @@ viewConfig =
                 { attributes =
                     [ Attributes.class "entry"
                     , Attributes.classList
-                        [ ( "entry--selected", selected )
+                        [ ( "entry--mouse-focused", hovered )
                         , ( "entry--keyboard-focused", focused )
-                        , ( "entry--mouse-focused", hovered )
                         ]
                     ]
-                , children = liChildren maybeQuery name
+                , children =
+                    Html.span
+                        [ Attributes.class "icon"
+                        , Attributes.class "is-small"
+                        , Attributes.style "margin-right" "8px"
+                        , Attributes.style "margin-left" "8px"
+                        , Attributes.style "font-size" "12px"
+                        , Attributes.style "width" "16px"
+                        ]
+                        [ if selected then
+                            Html.i
+                                [ Attributes.class "fas"
+                                , Attributes.class "fa-check"
+                                ]
+                                []
+
+                          else
+                            Html.text ""
+                        ]
+                        :: liChildren maybeQuery name
                 }
         , liDivider = Listbox.noDivider
         , empty = Html.div [] [ Html.text "this list is empty" ]
