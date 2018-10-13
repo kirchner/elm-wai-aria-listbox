@@ -2,6 +2,7 @@ module Internal.Listbox exposing
     ( Behaviour
     , Effect(..)
     , Entry(..)
+    , Focus(..)
     , Instance
     , Listbox
     , Msg(..)
@@ -10,6 +11,7 @@ module Internal.Listbox exposing
     , UpdateConfig
     , ViewConfig
     , Views
+    , currentFocus
     , find
     , focusEntry
     , focusNextOrFirstEntry
@@ -54,9 +56,7 @@ type alias Listbox =
     , query : Query
 
     -- FOCUS
-    , focus : Maybe String
-    , pendingFocus : Maybe PendingFocus
-    , focusScheduled : Bool
+    , focus : Focus
     , hover : Maybe String
     , maybeLastSelectedEntry : Maybe String
 
@@ -66,10 +66,27 @@ type alias Listbox =
     }
 
 
-type alias PendingFocus =
-    { hash : String
-    , shiftDown : Bool
-    }
+type Focus
+    = NoFocus
+    | Focus String
+    | Pending
+        { current : String
+        , pending : String
+        , shiftDown : Bool
+        }
+
+
+currentFocus : Focus -> Maybe String
+currentFocus focus =
+    case focus of
+        NoFocus ->
+            Nothing
+
+        Focus current ->
+            Just current
+
+        Pending { current } ->
+            Just current
 
 
 type Query
@@ -85,9 +102,7 @@ init : Listbox
 init =
     { preventScroll = False
     , query = NoQuery
-    , focus = Nothing
-    , pendingFocus = Nothing
-    , focusScheduled = False
+    , focus = NoFocus
     , hover = Nothing
     , maybeLastSelectedEntry = Nothing
     , ulScrollTop = 0
@@ -110,7 +125,7 @@ type Entry a divider
 
 focusedEntry : UpdateConfig a -> Listbox -> List (Entry a divider) -> Maybe a
 focusedEntry { uniqueId } listbox allEntries =
-    Maybe.andThen (find uniqueId allEntries) listbox.focus
+    Maybe.andThen (find uniqueId allEntries) (currentFocus listbox.focus)
 
 
 hoveredEntry : UpdateConfig a -> Listbox -> List (Entry a divider) -> Maybe a
@@ -122,7 +137,7 @@ focusEntry : UpdateConfig a -> a -> Listbox -> List a -> ( Listbox, List a )
 focusEntry { uniqueId, behaviour } a listbox selection =
     ( { listbox
         | query = NoQuery
-        , focus = Just (uniqueId a)
+        , focus = Focus (uniqueId a)
       }
     , if behaviour.selectionFollowsFocus then
         [ a ]
@@ -144,7 +159,7 @@ focusNextOrFirstEntry config allEntries listbox selection =
             config
 
         maybeA =
-            case listbox.focus of
+            case currentFocus listbox.focus of
                 Nothing ->
                     firstEntry allEntries
 
@@ -170,7 +185,7 @@ focusNextOrFirstEntry config allEntries listbox selection =
         Just a ->
             let
                 newListbox =
-                    { listbox | focus = Just (uniqueId a) }
+                    { listbox | focus = Focus (uniqueId a) }
             in
             if behaviour.selectionFollowsFocus then
                 ( newListbox
@@ -195,7 +210,7 @@ focusPreviousOrFirstEntry config allEntries listbox selection =
             config
 
         maybeA =
-            case listbox.focus of
+            case currentFocus listbox.focus of
                 Nothing ->
                     firstEntry allEntries
 
@@ -221,7 +236,7 @@ focusPreviousOrFirstEntry config allEntries listbox selection =
         Just a ->
             let
                 newListbox =
-                    { listbox | focus = Just (uniqueId a) }
+                    { listbox | focus = Focus (uniqueId a) }
             in
             if behaviour.selectionFollowsFocus then
                 ( newListbox
@@ -237,11 +252,14 @@ focusPreviousOrFirstEntry config allEntries listbox selection =
 scrollToFocus : Behaviour a -> String -> Listbox -> Effect a
 scrollToFocus behaviour id listbox =
     case listbox.focus of
-        Nothing ->
+        NoFocus ->
             CmdNone
 
-        Just hash ->
-            ScrollToOption behaviour id hash Nothing
+        Focus current ->
+            ScrollToOption behaviour id current Nothing
+
+        Pending { current } ->
+            ScrollToOption behaviour id current Nothing
 
 
 
@@ -342,7 +360,7 @@ view multiSelectable config instance allEntries listbox selection =
                     in
                     Html.lazy8 viewEntry
                         multiSelectable
-                        (listbox.focus == maybeHash)
+                        (currentFocus listbox.focus == maybeHash)
                         (listbox.hover == maybeHash)
                         (List.any ((==) option) selection)
                         config
@@ -375,7 +393,7 @@ view multiSelectable config instance allEntries listbox selection =
          , Events.onFocus (lift (ListFocused id))
          , Events.onBlur (lift ListBlured)
          ]
-            |> setAriaActivedescendant id uniqueId listbox.focus allEntries
+            |> setAriaActivedescendant id uniqueId (currentFocus listbox.focus) allEntries
             |> setTabindex views.focusable
             |> appendAttributes lift views.ul
         )
@@ -717,6 +735,7 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
             let
                 maybeA =
                     listbox.focus
+                        |> currentFocus
                         |> or listbox.maybeLastSelectedEntry
                         |> Maybe.andThen (find uniqueId allEntries)
                         |> or (List.head selection)
@@ -735,7 +754,7 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
                         newListbox =
                             { listbox
                                 | query = NoQuery
-                                , focus = Just hash
+                                , focus = Focus hash
                             }
                     in
                     if behaviour.selectionFollowsFocus then
@@ -755,8 +774,12 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
                     if behaviour.jumpAtEnds then
                         { listbox
                             | query = NoQuery
-                            , pendingFocus = Just (PendingFocus (uniqueId a) shiftDown)
-                            , focusScheduled = True
+                            , focus =
+                                Pending
+                                    { current = current
+                                    , pending = uniqueId a
+                                    , shiftDown = shiftDown
+                                    }
                         }
                             |> fromModel
                             |> withEffect (ScrollListToBottom id)
@@ -785,8 +808,12 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
                     in
                     { listbox
                         | query = NoQuery
-                        , pendingFocus = Just (PendingFocus hash shiftDown)
-                        , focusScheduled = True
+                        , focus =
+                            Pending
+                                { current = current
+                                , pending = hash
+                                , shiftDown = shiftDown
+                                }
                     }
                         |> fromModel
                         |> withEffect (ScrollToOption behaviour id hash (Just current))
@@ -800,8 +827,12 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
                     if behaviour.jumpAtEnds then
                         { listbox
                             | query = NoQuery
-                            , pendingFocus = Just (PendingFocus (uniqueId a) shiftDown)
-                            , focusScheduled = True
+                            , focus =
+                                Pending
+                                    { current = current
+                                    , pending = uniqueId a
+                                    , shiftDown = shiftDown
+                                    }
                         }
                             |> fromModel
                             |> withEffect (ScrollListToTop id)
@@ -830,8 +861,12 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
                     in
                     { listbox
                         | query = NoQuery
-                        , pendingFocus = Just (PendingFocus hash shiftDown)
-                        , focusScheduled = True
+                        , focus =
+                            Pending
+                                { current = current
+                                , pending = hash
+                                , shiftDown = shiftDown
+                                }
                     }
                         |> fromModel
                         |> withEffect (ScrollToOption behaviour id hash (Just current))
@@ -840,23 +875,22 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
                     initFocus id
 
         focusScheduledFocus =
-            case listbox.pendingFocus of
-                Nothing ->
+            case listbox.focus of
+                NoFocus ->
                     unchanged
 
-                Just { hash, shiftDown } ->
-                    case find uniqueId allEntries hash of
+                Focus _ ->
+                    unchanged
+
+                Pending { pending, shiftDown } ->
+                    case find uniqueId allEntries pending of
                         Nothing ->
                             unchanged
 
                         Just a ->
                             let
                                 newListbox =
-                                    { listbox
-                                        | focus = Just hash
-                                        , pendingFocus = Nothing
-                                        , focusScheduled = False
-                                    }
+                                    { listbox | focus = Focus pending }
                             in
                             if behaviour.selectionFollowsFocus && not shiftDown then
                                 newListbox
@@ -873,11 +907,7 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
     in
     case msg of
         NoOp ->
-            if listbox.focusScheduled then
-                focusScheduledFocus
-
-            else
-                unchanged
+            focusScheduledFocus
 
         -- LIST
         ListMouseDown ->
@@ -902,51 +932,47 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
 
         ListArrowUpDown id ->
             case listbox.focus of
-                Nothing ->
+                NoFocus ->
                     initFocus id
 
-                Just hash ->
-                    if listbox.pendingFocus /= Nothing then
-                        unchanged
+                Focus hash ->
+                    scheduleFocusPrevious id False hash
 
-                    else
-                        scheduleFocusPrevious id False hash
+                Pending _ ->
+                    unchanged
 
         ListShiftArrowUpDown id ->
             case listbox.focus of
-                Nothing ->
+                NoFocus ->
                     initFocus id
 
-                Just hash ->
-                    if listbox.pendingFocus /= Nothing then
-                        unchanged
+                Focus hash ->
+                    scheduleFocusPrevious id True hash
 
-                    else
-                        scheduleFocusPrevious id True hash
+                Pending _ ->
+                    unchanged
 
         ListArrowDownDown id ->
             case listbox.focus of
-                Nothing ->
+                NoFocus ->
                     initFocus id
 
-                Just hash ->
-                    if listbox.pendingFocus /= Nothing then
-                        unchanged
+                Focus hash ->
+                    scheduleFocusNext id False hash
 
-                    else
-                        scheduleFocusNext id False hash
+                Pending _ ->
+                    unchanged
 
         ListShiftArrowDownDown id ->
             case listbox.focus of
-                Nothing ->
+                NoFocus ->
                     initFocus id
 
-                Just hash ->
-                    if listbox.pendingFocus /= Nothing then
-                        unchanged
+                Focus hash ->
+                    scheduleFocusNext id True hash
 
-                    else
-                        scheduleFocusNext id True hash
+                Pending _ ->
+                    unchanged
 
         ListEnterDown id ->
             case focusedEntry config listbox allEntries of
@@ -970,7 +996,7 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
             let
                 selected =
                     Maybe.map2 (range uniqueId allEntries)
-                        listbox.focus
+                        (currentFocus listbox.focus)
                         listbox.maybeLastSelectedEntry
                         |> Maybe.withDefault []
             in
@@ -990,7 +1016,7 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
                 Just a ->
                     { listbox
                         | query = NoQuery
-                        , focus = Just (uniqueId a)
+                        , focus = Focus (uniqueId a)
                     }
                         |> fromModel
                         |> withEffect (ScrollListToTop id)
@@ -1004,6 +1030,7 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
                     let
                         selected =
                             listbox.focus
+                                |> currentFocus
                                 |> Maybe.map (range uniqueId allEntries hash)
                                 |> Maybe.withDefault []
                     in
@@ -1013,7 +1040,7 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
 
                         a :: listA ->
                             { listbox
-                                | focus = Just hash
+                                | focus = Focus hash
                                 , hover =
                                     if behaviour.separateFocus then
                                         listbox.hover
@@ -1033,7 +1060,7 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
                 Just a ->
                     { listbox
                         | query = NoQuery
-                        , focus = Just (uniqueId a)
+                        , focus = Focus (uniqueId a)
                     }
                         |> fromModel
                         |> withEffect (ScrollListToBottom id)
@@ -1047,6 +1074,7 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
                     let
                         selected =
                             listbox.focus
+                                |> currentFocus
                                 |> Maybe.map (range uniqueId allEntries hash)
                                 |> Maybe.withDefault []
                     in
@@ -1056,7 +1084,7 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
 
                         a :: listA ->
                             { listbox
-                                | focus = Just hash
+                                | focus = Focus hash
                                 , hover =
                                     if behaviour.separateFocus then
                                         listbox.hover
@@ -1136,7 +1164,7 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
                         maybeHash =
                             Maybe.andThen
                                 (findWith matchesQuery uniqueId queryText allEntries)
-                                listbox.focus
+                                (currentFocus listbox.focus)
                     in
                     case maybeHash of
                         Nothing ->
@@ -1145,7 +1173,7 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
                         Just hash ->
                             { listbox
                                 | query = newQuery
-                                , focus = Just hash
+                                , focus = Focus hash
                                 , hover =
                                     if behaviour.separateFocus then
                                         listbox.hover
@@ -1180,7 +1208,7 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
                             listbox.focus
 
                         else
-                            Just newFocus
+                            Focus newFocus
                     , hover = Just newFocus
                 }
 
@@ -1202,7 +1230,7 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
             in
             { listbox
                 | query = NoQuery
-                , focus = Just hash
+                , focus = Focus hash
                 , hover = Just hash
             }
                 |> fromModel
@@ -1211,12 +1239,15 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
 
 focusPendingKeyboardFocus : Listbox -> Listbox
 focusPendingKeyboardFocus listbox =
-    case listbox.pendingFocus of
-        Nothing ->
+    case listbox.focus of
+        NoFocus ->
             listbox
 
-        Just { hash } ->
-            { listbox | focus = Just hash }
+        Focus _ ->
+            listbox
+
+        Pending { pending } ->
+            { listbox | focus = Focus pending }
 
 
 

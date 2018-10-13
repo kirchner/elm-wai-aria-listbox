@@ -159,7 +159,7 @@ architectureTests ({ behaviour } as updateConfig) =
     concat
         [ invariantTest "maybeKeyboardFocus" app <|
             \_ _ { listbox } ->
-                expectValidFocus listbox.focus
+                expectValidFocus (Listbox.currentFocus listbox.focus)
         , invariantTest "hover" app <|
             \_ _ { listbox } ->
                 expectValidOption listbox.hover
@@ -179,7 +179,7 @@ architectureTests ({ behaviour } as updateConfig) =
                             [ expectNextOrFirstOptionFocused behaviour
                             , Tuple.second >> expectNoPendingFocus
                             , if behaviour.selectionFollowsFocus then
-                                if before.listbox.focus /= Nothing then
+                                if Listbox.currentFocus before.listbox.focus /= Nothing then
                                     Tuple.second >> expectOnlyFocusSelected
 
                                 else
@@ -196,7 +196,7 @@ architectureTests ({ behaviour } as updateConfig) =
                         |> Expect.all
                             [ expectNextOrFirstOptionFocused behaviour
                             , Tuple.second >> expectNoPendingFocus
-                            , if before.listbox.focus /= Nothing then
+                            , if Listbox.currentFocus before.listbox.focus /= Nothing then
                                 expectSelectionToggledOfFocusedOption
 
                               else if behaviour.selectionFollowsFocus then
@@ -214,7 +214,7 @@ architectureTests ({ behaviour } as updateConfig) =
                             [ expectPreviousOrFirstOptionFocused behaviour
                             , Tuple.second >> expectNoPendingFocus
                             , if behaviour.selectionFollowsFocus then
-                                if before.listbox.focus /= Nothing then
+                                if Listbox.currentFocus before.listbox.focus /= Nothing then
                                     Tuple.second >> expectOnlyFocusSelected
 
                                 else
@@ -231,7 +231,7 @@ architectureTests ({ behaviour } as updateConfig) =
                         |> Expect.all
                             [ expectPreviousOrFirstOptionFocused behaviour
                             , Tuple.second >> expectNoPendingFocus
-                            , if before.listbox.focus /= Nothing then
+                            , if Listbox.currentFocus before.listbox.focus /= Nothing then
                                 expectSelectionToggledOfFocusedOption
 
                               else if behaviour.selectionFollowsFocus then
@@ -306,12 +306,14 @@ expectUnchangedHover before after =
 expectFirstOptionFocused : Model -> Expectation
 expectFirstOptionFocused { listbox } =
     listbox.focus
+        |> Listbox.currentFocus
         |> Expect.equal (Just firstOption)
 
 
 expectLastOptionFocused : Model -> Expectation
 expectLastOptionFocused { listbox } =
     listbox.focus
+        |> Listbox.currentFocus
         |> Expect.equal (Just lastOption)
 
 
@@ -344,7 +346,7 @@ expectOnlyFocusSelected : Model -> Expectation
 expectOnlyFocusSelected { listbox, selection } =
     let
         focusList =
-            case listbox.focus of
+            case Listbox.currentFocus listbox.focus of
                 Nothing ->
                     []
 
@@ -371,7 +373,7 @@ expectFocusedOptionAddedToSelection ( before, after ) =
         afterSelection =
             Set.fromList after.selection
     in
-    case after.listbox.focus of
+    case Listbox.currentFocus after.listbox.focus of
         Nothing ->
             Expect.fail "Expected the listbox to have a keyboardFocus"
 
@@ -396,7 +398,7 @@ expectSelectionToggledOfFocusedOption ( before, after ) =
         afterSelection =
             Set.fromList after.selection
     in
-    case after.listbox.focus of
+    case Listbox.currentFocus after.listbox.focus of
         Nothing ->
             Expect.fail "Expected the listbox to have a keyboardFocus"
 
@@ -416,13 +418,24 @@ expectSelectionToggledOfFocusedOption ( before, after ) =
 
 expectNoPendingFocus : Model -> Expectation
 expectNoPendingFocus { listbox } =
-    listbox.pendingFocus
-        |> Expect.equal Nothing
+    case listbox.focus of
+        Listbox.NoFocus ->
+            Expect.pass
+
+        Listbox.Focus _ ->
+            Expect.pass
+
+        Listbox.Pending _ ->
+            Expect.fail "Expecting no pending focus"
 
 
 expectNextOrFirstOptionFocused : Listbox.Behaviour String -> ( Model, Model ) -> Expectation
 expectNextOrFirstOptionFocused behaviour ( before, after ) =
-    case ( before.listbox.focus, after.listbox.focus ) of
+    case
+        ( Listbox.currentFocus before.listbox.focus
+        , Listbox.currentFocus after.listbox.focus
+        )
+    of
         ( Just focusBefore, Just focusAfter ) ->
             let
                 maybeNextOption =
@@ -455,7 +468,7 @@ expectNextOrFirstOptionFocused behaviour ( before, after ) =
                         |> Expect.equal afterLastSelectedEntry
 
         ( Just focusBefore, Nothing ) ->
-            case after.listbox.focus of
+            case Listbox.currentFocus after.listbox.focus of
                 Just afterKeyboardFocus ->
                     afterKeyboardFocus
                         |> Expect.equal focusBefore
@@ -469,7 +482,11 @@ expectNextOrFirstOptionFocused behaviour ( before, after ) =
 
 expectPreviousOrFirstOptionFocused : Listbox.Behaviour String -> ( Model, Model ) -> Expectation
 expectPreviousOrFirstOptionFocused behaviour ( before, after ) =
-    case ( before.listbox.focus, after.listbox.focus ) of
+    case
+        ( Listbox.currentFocus before.listbox.focus
+        , Listbox.currentFocus after.listbox.focus
+        )
+    of
         ( Just focusBefore, Just focusAfter ) ->
             let
                 maybePreviousOption =
@@ -502,7 +519,7 @@ expectPreviousOrFirstOptionFocused behaviour ( before, after ) =
                         |> Expect.equal afterLastSelectedEntry
 
         ( Just focusBefore, Nothing ) ->
-            case after.listbox.focus of
+            case Listbox.currentFocus after.listbox.focus of
                 Just afterKeyboardFocus ->
                     afterKeyboardFocus
                         |> Expect.equal focusBefore
@@ -538,8 +555,6 @@ listboxApp updateConfig =
                     ++ Debug.toString listbox.hover
                 , "      , ulScrollTop            = "
                     ++ Debug.toString listbox.ulScrollTop
-                    ++ ",       pendingFocus = "
-                    ++ Debug.toString listbox.pendingFocus
                 , "      , ulClientHeight         = "
                     ++ Debug.toString listbox.ulClientHeight
                 , "      , maybeLastSelectedEntry = "
