@@ -216,9 +216,9 @@ focusPreviousOrFirstEntry config allEntries listbox selection =
 {-| A command adjusting the scroll position of the listbox such that the
 current keyboard focus is visible.
 -}
-scrollToFocus : Instance a msg -> Listbox -> Cmd msg
-scrollToFocus { id, lift } listbox =
-    Cmd.map lift (perform (Internal.scrollToFocus id listbox))
+scrollToFocus : Behaviour a -> Instance a msg -> Listbox -> Cmd msg
+scrollToFocus behaviour { id, lift } listbox =
+    Cmd.map lift (perform (Internal.scrollToFocus behaviour id listbox))
 
 
 
@@ -607,6 +607,21 @@ update config entries msg listbox selection =
     ( newListbox, perform effect, newSelection )
 
 
+type alias InitialEntryDomData =
+    { viewportList : Dom.Viewport
+    , elementList : Dom.Element
+    , elementLi : Dom.Element
+    }
+
+
+type alias EntryDomData =
+    { viewportList : Dom.Viewport
+    , elementList : Dom.Element
+    , elementLi : Dom.Element
+    , elementPreviousLi : Dom.Element
+    }
+
+
 perform : Internal.Effect a -> Cmd (Msg a)
 perform effect =
     case effect of
@@ -624,72 +639,135 @@ perform effect =
             Task.attempt (\_ -> Internal.NoOp) <|
                 Dom.focus id
 
-        Internal.ScrollListToTop toMsg id ->
-            Task.succeed toMsg
-                |> and (Dom.getViewportOf (Internal.printListId id))
-                |> Task.attempt
-                    (\result ->
-                        case result of
-                            Err _ ->
-                                Internal.NoOp
-
-                            Ok msg ->
-                                msg
+        -- SCROLLING
+        Internal.ScrollListToTop id ->
+            Dom.getViewportOf (Internal.printListId id)
+                |> Task.andThen
+                    (\list ->
+                        Dom.setViewportOf (Internal.printListId id)
+                            list.viewport.x
+                            0
                     )
+                |> Task.attempt (\_ -> Internal.NoOp)
 
-        Internal.ScrollListToBottom toMsg id ->
-            Task.succeed toMsg
-                |> and (Dom.getViewportOf (Internal.printListId id))
-                |> Task.attempt
-                    (\result ->
-                        case result of
-                            Err _ ->
-                                Internal.NoOp
-
-                            Ok msg ->
-                                msg
+        Internal.ScrollListToBottom id ->
+            Dom.getViewportOf (Internal.printListId id)
+                |> Task.andThen
+                    (\list ->
+                        Dom.setViewportOf (Internal.printListId id)
+                            list.viewport.x
+                            list.scene.height
                     )
+                |> Task.attempt (\_ -> Internal.NoOp)
 
-        Internal.AdjustScrollTop toMsg id entryId ->
-            Task.map3 Internal.InitialEntryDomData
-                (Dom.getViewportOf (Internal.printListId id))
-                (Dom.getElement (Internal.printListId id))
-                (Dom.getElement (Internal.printEntryId id entryId))
-                |> Task.attempt
-                    (\result ->
-                        case result of
-                            Err _ ->
-                                Internal.NoOp
+        Internal.ScrollToOption behaviour id hash maybePreviousHash ->
+            case maybePreviousHash of
+                Nothing ->
+                    Task.map3 InitialEntryDomData
+                        (Dom.getViewportOf (Internal.printListId id))
+                        (Dom.getElement (Internal.printListId id))
+                        (Dom.getElement (Internal.printEntryId id hash))
+                        |> Task.andThen
+                            (\{ viewportList, elementList, elementLi } ->
+                                let
+                                    { viewport } =
+                                        viewportList
 
-                            Ok initialEntryDomData ->
-                                toMsg initialEntryDomData
-                    )
+                                    liY =
+                                        elementLi.element.y - elementList.element.y + viewport.y
 
-        Internal.AdjustScrollTopNew toMsg id entryId previousEntryId ->
-            Task.map4 Internal.EntryDomData
-                (Dom.getViewportOf (Internal.printListId id))
-                (Dom.getElement (Internal.printListId id))
-                (Dom.getElement (Internal.printEntryId id entryId))
-                (Dom.getElement (Internal.printEntryId id previousEntryId))
-                |> Task.attempt
-                    (\result ->
-                        case result of
-                            Err _ ->
-                                Internal.NoOp
+                                    liHeight =
+                                        elementLi.element.height
 
-                            Ok entryDomData ->
-                                toMsg entryDomData
-                    )
+                                    entryHidden =
+                                        (liY + liHeight - behaviour.minimalGap < viewport.y)
+                                            || (liY + behaviour.minimalGap > viewport.y + viewport.height)
+                                in
+                                if entryHidden then
+                                    Dom.setViewportOf
+                                        (Internal.printListId id)
+                                        viewport.x
+                                        (liY + liHeight / 2 - viewport.height / 2)
 
+                                else
+                                    Task.succeed ()
+                            )
+                        |> Task.attempt (\_ -> Internal.NoOp)
 
-and : Task x a -> Task x (a -> b) -> Task x b
-and task previousTask =
-    Task.map2 apply previousTask task
+                Just previousHash ->
+                    Task.map4 EntryDomData
+                        (Dom.getViewportOf (Internal.printListId id))
+                        (Dom.getElement (Internal.printListId id))
+                        (Dom.getElement (Internal.printEntryId id hash))
+                        (Dom.getElement (Internal.printEntryId id previousHash))
+                        |> Task.andThen
+                            (\entryDomData ->
+                                let
+                                    viewport =
+                                        entryDomData.viewportList.viewport
 
+                                    list =
+                                        entryDomData.elementList
 
-apply : (a -> b) -> a -> b
-apply f a =
-    f a
+                                    li =
+                                        entryDomData.elementLi
+
+                                    previousLi =
+                                        entryDomData.elementPreviousLi
+
+                                    -- MEASUREMENTS
+                                    liY =
+                                        li.element.y - list.element.y + viewport.y
+
+                                    liHeight =
+                                        li.element.height
+
+                                    previousLiY =
+                                        previousLi.element.y - list.element.y + viewport.y
+
+                                    previousLiHeight =
+                                        previousLi.element.height
+
+                                    -- CONDITIONS
+                                    previousEntryHidden =
+                                        (previousLiY + previousLiHeight < viewport.y)
+                                            || (previousLiY > viewport.y + viewport.height)
+
+                                    newEntryTooLow =
+                                        liY + liHeight + behaviour.minimalGap > viewport.y + viewport.height
+
+                                    newEntryTooHigh =
+                                        liY - behaviour.minimalGap < viewport.y
+
+                                    -- EFFECT
+                                    centerNewEntry =
+                                        domSetViewportOf viewport.x <|
+                                            (liY + liHeight / 2 - viewport.height / 2)
+
+                                    scrollDownToNewEntry =
+                                        domSetViewportOf viewport.x <|
+                                            (liY + liHeight - viewport.height + behaviour.initialGap)
+
+                                    scrollUpToNewEntry =
+                                        domSetViewportOf viewport.x <|
+                                            (liY - behaviour.initialGap)
+
+                                    domSetViewportOf x y =
+                                        Dom.setViewportOf (Internal.printListId id) x y
+                                in
+                                if previousEntryHidden then
+                                    centerNewEntry
+
+                                else if newEntryTooLow then
+                                    scrollDownToNewEntry
+
+                                else if newEntryTooHigh then
+                                    scrollUpToNewEntry
+
+                                else
+                                    Task.succeed ()
+                            )
+                        |> Task.attempt (\_ -> Internal.NoOp)
 
 
 

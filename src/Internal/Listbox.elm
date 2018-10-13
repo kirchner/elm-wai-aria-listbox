@@ -2,8 +2,6 @@ module Internal.Listbox exposing
     ( Behaviour
     , Effect(..)
     , Entry(..)
-    , EntryDomData
-    , InitialEntryDomData
     , Instance
     , Listbox
     , Msg(..)
@@ -22,8 +20,6 @@ module Internal.Listbox exposing
     , preventDefaultOnKeyDown
     , printEntryId
     , printListId
-    , scrollListToBottom
-    , scrollListToTop
     , scrollToFocus
     , subscriptions
     , update
@@ -238,14 +234,14 @@ focusPreviousOrFirstEntry config allEntries listbox selection =
                 )
 
 
-scrollToFocus : String -> Listbox -> Effect a
-scrollToFocus id listbox =
+scrollToFocus : Behaviour a -> String -> Listbox -> Effect a
+scrollToFocus behaviour id listbox =
     case listbox.focus of
         Nothing ->
             CmdNone
 
         Just hash ->
-            adjustScrollTop id hash
+            ScrollToOption behaviour id hash Nothing
 
 
 
@@ -649,25 +645,6 @@ type Msg a
     | EntryMouseEntered String
     | EntryMouseLeft
     | EntryClicked a
-      -- SCROLLING
-    | InitialEntryDomElementReceived String InitialEntryDomData
-    | EntryDomElementReceived String String EntryDomData
-    | ListViewportReceived Direction String Dom.Viewport
-
-
-type alias InitialEntryDomData =
-    { viewportList : Dom.Viewport
-    , elementList : Dom.Element
-    , elementLi : Dom.Element
-    }
-
-
-type alias EntryDomData =
-    { viewportList : Dom.Viewport
-    , elementList : Dom.Element
-    , elementLi : Dom.Element
-    , elementPreviousLi : Dom.Element
-    }
 
 
 type Direction
@@ -680,11 +657,10 @@ type Effect a
     | TimeNow (Posix -> Msg a)
     | DomSetViewportOf String Float Float
     | DomFocus String
-      -- CUSTOM
-    | ScrollListToTop (Dom.Viewport -> Msg a) String
-    | ScrollListToBottom (Dom.Viewport -> Msg a) String
-    | AdjustScrollTop (InitialEntryDomData -> Msg a) String String
-    | AdjustScrollTopNew (EntryDomData -> Msg a) String String String
+      -- SCROLLING
+    | ScrollListToTop String
+    | ScrollListToBottom String
+    | ScrollToOption (Behaviour a) String String (Maybe String)
 
 
 update :
@@ -765,13 +741,13 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
                     if behaviour.selectionFollowsFocus then
                         newListbox
                             |> fromModel
-                            |> withEffect (adjustScrollTop id hash)
+                            |> withEffect (ScrollToOption behaviour id hash Nothing)
                             |> select a []
 
                     else
                         newListbox
                             |> fromModel
-                            |> withEffect (adjustScrollTop id hash)
+                            |> withEffect (ScrollToOption behaviour id hash Nothing)
 
         scheduleFocusPrevious id shiftDown current =
             case findPrevious uniqueId allEntries current of
@@ -779,11 +755,11 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
                     if behaviour.jumpAtEnds then
                         { listbox
                             | query = NoQuery
-                            , pendingFocus =
-                                Just (PendingFocus (uniqueId a) shiftDown)
+                            , pendingFocus = Just (PendingFocus (uniqueId a) shiftDown)
+                            , focusScheduled = True
                         }
                             |> fromModel
-                            |> withEffect (scrollListToBottom id)
+                            |> withEffect (ScrollListToBottom id)
 
                     else if behaviour.selectionFollowsFocus then
                         case find uniqueId allEntries current of
@@ -810,9 +786,10 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
                     { listbox
                         | query = NoQuery
                         , pendingFocus = Just (PendingFocus hash shiftDown)
+                        , focusScheduled = True
                     }
                         |> fromModel
-                        |> withEffect (adjustScrollTopNew id hash current)
+                        |> withEffect (ScrollToOption behaviour id hash (Just current))
 
                 Nothing ->
                     initFocus id
@@ -823,11 +800,11 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
                     if behaviour.jumpAtEnds then
                         { listbox
                             | query = NoQuery
-                            , pendingFocus =
-                                Just (PendingFocus (uniqueId a) shiftDown)
+                            , pendingFocus = Just (PendingFocus (uniqueId a) shiftDown)
+                            , focusScheduled = True
                         }
                             |> fromModel
-                            |> withEffect (scrollListToTop id)
+                            |> withEffect (ScrollListToTop id)
 
                     else if behaviour.selectionFollowsFocus then
                         case find uniqueId allEntries current of
@@ -854,9 +831,10 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
                     { listbox
                         | query = NoQuery
                         , pendingFocus = Just (PendingFocus hash shiftDown)
+                        , focusScheduled = True
                     }
                         |> fromModel
-                        |> withEffect (adjustScrollTopNew id hash current)
+                        |> withEffect (ScrollToOption behaviour id hash (Just current))
 
                 Nothing ->
                     initFocus id
@@ -1012,10 +990,10 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
                 Just a ->
                     { listbox
                         | query = NoQuery
-                        , pendingFocus = Just (PendingFocus (uniqueId a) False)
+                        , focus = Just (uniqueId a)
                     }
                         |> fromModel
-                        |> withEffect (scrollListToTop id)
+                        |> withEffect (ScrollListToTop id)
 
         ListControlShiftHomeDown id ->
             case Maybe.map uniqueId (firstEntry allEntries) of
@@ -1045,7 +1023,7 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
                             }
                                 |> fromModel
                                 |> select a listA
-                                |> withEffect (scrollListToTop id)
+                                |> withEffect (ScrollListToTop id)
 
         ListEndDown id ->
             case lastEntry allEntries of
@@ -1055,10 +1033,10 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
                 Just a ->
                     { listbox
                         | query = NoQuery
-                        , pendingFocus = Just (PendingFocus (uniqueId a) False)
+                        , focus = Just (uniqueId a)
                     }
                         |> fromModel
-                        |> withEffect (scrollListToBottom id)
+                        |> withEffect (ScrollListToBottom id)
 
         ListControlShiftEndDown id ->
             case Maybe.map uniqueId (lastEntry allEntries) of
@@ -1088,7 +1066,7 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
                             }
                                 |> fromModel
                                 |> select a listA
-                                |> withEffect (scrollListToBottom id)
+                                |> withEffect (ScrollListToBottom id)
 
         ListControlADown ->
             let
@@ -1176,7 +1154,7 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
                                         Just hash
                             }
                                 |> fromModel
-                                |> withEffect (adjustScrollTop id hash)
+                                |> withEffect (ScrollToOption behaviour id hash Nothing)
 
         Tick currentTime ->
             case listbox.query of
@@ -1230,116 +1208,6 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
                 |> fromModel
                 |> toggle a
 
-        -- SCROLLING
-        InitialEntryDomElementReceived id { viewportList, elementList, elementLi } ->
-            let
-                { viewport } =
-                    viewportList
-
-                liY =
-                    elementLi.element.y - elementList.element.y + viewport.y
-
-                liHeight =
-                    elementLi.element.height
-
-                entryHidden =
-                    (liY + liHeight - behaviour.minimalGap < viewport.y)
-                        || (liY + behaviour.minimalGap > viewport.y + viewport.height)
-
-                centerEntry =
-                    DomSetViewportOf (printListId id) viewport.x <|
-                        (liY + liHeight / 2 - viewport.height / 2)
-            in
-            if entryHidden then
-                fromModel { listbox | focusScheduled = True }
-                    |> withEffect centerEntry
-
-            else
-                focusScheduledFocus
-
-        EntryDomElementReceived entryId id entryDomData ->
-            let
-                viewport =
-                    entryDomData.viewportList.viewport
-
-                list =
-                    entryDomData.elementList
-
-                li =
-                    entryDomData.elementLi
-
-                previousLi =
-                    entryDomData.elementPreviousLi
-
-                -- MEASUREMENTS
-                liY =
-                    li.element.y - list.element.y + viewport.y
-
-                liHeight =
-                    li.element.height
-
-                previousLiY =
-                    previousLi.element.y - list.element.y + viewport.y
-
-                previousLiHeight =
-                    previousLi.element.height
-
-                -- CONDITIONS
-                previousEntryHidden =
-                    (previousLiY + previousLiHeight < viewport.y)
-                        || (previousLiY > viewport.y + viewport.height)
-
-                newEntryTooLow =
-                    liY + liHeight + behaviour.minimalGap > viewport.y + viewport.height
-
-                newEntryTooHigh =
-                    liY - behaviour.minimalGap < viewport.y
-
-                -- EFFECT
-                centerNewEntry =
-                    DomSetViewportOf (printListId id) viewport.x <|
-                        (liY + liHeight / 2 - viewport.height / 2)
-
-                scrollDownToNewEntry =
-                    DomSetViewportOf (printListId id) viewport.x <|
-                        (liY + liHeight - viewport.height + behaviour.initialGap)
-
-                scrollUpToNewEntry =
-                    DomSetViewportOf (printListId id) viewport.x <|
-                        (liY - behaviour.initialGap)
-            in
-            if previousEntryHidden then
-                fromModel { listbox | focusScheduled = True }
-                    |> withEffect centerNewEntry
-
-            else if newEntryTooLow then
-                fromModel { listbox | focusScheduled = True }
-                    |> withEffect scrollDownToNewEntry
-
-            else if newEntryTooHigh then
-                fromModel { listbox | focusScheduled = True }
-                    |> withEffect scrollUpToNewEntry
-
-            else
-                focusScheduledFocus
-
-        ListViewportReceived direction id list ->
-            let
-                effect =
-                    case direction of
-                        Top ->
-                            DomSetViewportOf (printListId id)
-                                list.viewport.x
-                                0
-
-                        Bottom ->
-                            DomSetViewportOf (printListId id)
-                                list.viewport.x
-                                list.scene.height
-            in
-            fromModel { listbox | focusScheduled = True }
-                |> withEffect effect
-
 
 focusPendingKeyboardFocus : Listbox -> Listbox
 focusPendingKeyboardFocus listbox =
@@ -1377,26 +1245,6 @@ or fallback default =
 focusList : String -> Effect a
 focusList id =
     DomFocus (printListId id)
-
-
-scrollListToTop : String -> Effect a
-scrollListToTop id =
-    ScrollListToTop (ListViewportReceived Top id) id
-
-
-scrollListToBottom : String -> Effect a
-scrollListToBottom id =
-    ScrollListToBottom (ListViewportReceived Bottom id) id
-
-
-adjustScrollTop : String -> String -> Effect a
-adjustScrollTop id =
-    AdjustScrollTop (InitialEntryDomElementReceived id) id
-
-
-adjustScrollTopNew : String -> String -> String -> Effect a
-adjustScrollTopNew id entryId =
-    AdjustScrollTopNew (EntryDomElementReceived entryId id) id entryId
 
 
 

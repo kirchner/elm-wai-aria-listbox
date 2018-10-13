@@ -596,130 +596,19 @@ update updateConfig msg model =
             else
                 newModel
 
-        ScrollListToTop toMsg _ ->
-            update updateConfig
-                (toMsg
-                    { scene = listboxScene
-                    , viewport =
-                        { x = 0
-                        , y = 0
-                        , width = 100
-                        , height = 80
-                        }
-                    }
-                )
-                newModel
+        ScrollListToTop _ ->
+            update updateConfig NoOp newModel
 
-        ScrollListToBottom toMsg _ ->
-            update updateConfig
-                (toMsg
-                    { scene = listboxScene
-                    , viewport =
-                        { x = 0
-                        , y = 30 * toFloat (List.length onlyOptions) - 80
-                        , width = 100
-                        , height = 80
-                        }
-                    }
-                )
-                newModel
+        ScrollListToBottom _ ->
+            update updateConfig NoOp newModel
 
-        AdjustScrollTop toMsg _ entryId ->
-            let
-                viewportOfList =
-                    { scene = browserScene
-                    , viewport =
-                        { x = 0
-                        , y = 0
-                        , width = 100
-                        , height = 80
-                        }
-                    }
-            in
-            update updateConfig
-                (toMsg
-                    { viewportList = viewportOfList
-                    , elementList = elementOfList
-                    , elementLi = elementOfEntry entryId
-                    }
-                )
-                newModel
-
-        AdjustScrollTopNew toMsg _ entryId previousEntryId ->
-            let
-                viewportOfList =
-                    { scene = browserScene
-                    , viewport =
-                        { x = 0
-                        , y = 0
-                        , width = 100
-                        , height = 80
-                        }
-                    }
-            in
-            update updateConfig
-                (toMsg
-                    { viewportList = viewportOfList
-                    , elementList = elementOfList
-                    , elementLi = elementOfEntry entryId
-                    , elementPreviousLi = elementOfEntry previousEntryId
-                    }
-                )
-                newModel
+        ScrollToOption _ _ _ _ ->
+            update updateConfig NoOp newModel
 
 
 id : String
 id =
     "listbox"
-
-
-
--- DOM LENGTHS
-
-
-browserScene =
-    { width = 100
-    , height = 80
-    }
-
-
-listboxScene =
-    { width = 100
-    , height = 30 * toFloat (List.length onlyOptions)
-    }
-
-
-browserViewport =
-    { x = 0
-    , y = 0
-    , width = browserScene.width
-    , height = browserScene.height
-    }
-
-
-elementOfList =
-    { scene = browserScene
-    , viewport = browserViewport
-    , element = browserViewport
-    }
-
-
-elementOfEntry entryId =
-    let
-        position =
-            options
-                |> List.takeWhile ((/=) entryId)
-                |> List.length
-    in
-    { scene = browserScene
-    , viewport = browserViewport
-    , element =
-        { x = 0
-        , y = toFloat position * 30
-        , width = 100
-        , height = 30
-        }
-    }
 
 
 
