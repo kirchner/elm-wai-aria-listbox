@@ -11,6 +11,9 @@ module Listbox exposing
     , focus
     , scrollToFocus
     , preventDefaultOnKeyDown
+    , customView, DomFunctions
+    , CustomViewConfig, customViewConfig, CustomViews
+    , customPreventDefaultOnKeyDown
     )
 
 {-| Implementation of the [listbox
@@ -72,6 +75,18 @@ interactions this widget offers.
 
 @docs preventDefaultOnKeyDown
 
+
+## Different DOM libraries
+
+You can use these functions if you want to use other DOM libraries, like for
+example `rtfeldman/elm-css`.
+
+@docs customView, DomFunctions
+
+@docs CustomViewConfig, customViewConfig, CustomViews
+
+@docs customPreventDefaultOnKeyDown
+
 -}
 
 {-
@@ -92,8 +107,11 @@ interactions this widget offers.
 
 -}
 
+import Accessibility.Aria as Aria
+import Accessibility.Role as Role
+import Accessibility.Widget as Widget
 import Browser.Dom as Dom
-import Html exposing (Html)
+import Html exposing (Attribute, Html)
 import Html.Attributes as Attributes
 import Html.Events as Events
 import Internal.KeyInfo as KeyInfo exposing (KeyInfo)
@@ -227,7 +245,7 @@ scrollToFocus behaviour { id, lift } listbox =
 
 {-| -}
 type alias ViewConfig a divider =
-    Internal.ViewConfig a divider
+    Internal.ViewConfig a divider (Attribute Never) (Html Never)
 
 
 {-| Generate a `ViewConfig` by providing a hash function for the entries and
@@ -333,13 +351,13 @@ noDivider _ =
 a DOM element.
 -}
 type alias HtmlAttributes =
-    List (Html.Attribute Never)
+    List (Attribute Never)
 
 
 {-| Used to apply styling and content to a DOM element.
 -}
 type alias HtmlDetails =
-    { attributes : List (Html.Attribute Never)
+    { attributes : List (Attribute Never)
     , children : List (Html Never)
     }
 
@@ -520,7 +538,26 @@ view :
     -> List a
     -> Html msg
 view config instance allEntries listbox selection =
-    Internal.view True config instance allEntries listbox selection
+    Internal.view True htmlFunctions config instance allEntries listbox selection
+
+
+htmlFunctions : DomFunctions (Attribute msg) (Attribute Never) (Html msg) (Html Never) msg a
+htmlFunctions =
+    { ul = Html.ul
+    , li = Html.li
+    , on = Events.on
+    , preventDefaultOn = Events.preventDefaultOn
+    , tabindex = Attributes.tabindex
+    , id = Attributes.id
+    , listBox = Role.listBox
+    , labelledBy = Aria.labelledBy
+    , multiSelectable = Widget.multiSelectable
+    , option = Role.option
+    , selected = Widget.selected
+    , activeDescendant = Aria.activeDescendant
+    , htmlFromNever = \lift noOp -> Html.map (\_ -> lift noOp)
+    , attributeFromNever = \lift noOp -> Attributes.map (\_ -> lift noOp)
+    }
 
 
 {-| This adds all the keydown event listener needed for the listbox on any DOM
@@ -547,11 +584,105 @@ In this example, pressing keys like `ArrowUp` and `ArrowDown` will adjust the
 listbox's focus although the listbox itself is not focused.
 
 -}
-preventDefaultOnKeyDown :
-    Instance a msg
-    -> Decoder ( msg, Bool )
-    -> Html.Attribute msg
+preventDefaultOnKeyDown : Instance a msg -> Decoder ( msg, Bool ) -> Attribute msg
 preventDefaultOnKeyDown =
+    Internal.preventDefaultOnKeyDown Events.preventDefaultOn
+
+
+
+---- CUSTOM DOM
+
+
+{-| TODO
+-}
+type alias CustomViewConfig a divider attributeNever htmlNever =
+    Internal.ViewConfig a divider attributeNever htmlNever
+
+
+{-| TODO
+-}
+customViewConfig :
+    (a -> String)
+    -> CustomViews a divider attributeNever htmlNever
+    -> CustomViewConfig a divider attributeNever htmlNever
+customViewConfig =
+    Internal.ViewConfig
+
+
+{-| TODO
+-}
+type alias CustomViews a divider attributeNever htmlNever =
+    { ul : List attributeNever
+    , liOption :
+        { selected : Bool
+        , focused : Bool
+        , hovered : Bool
+        , maybeQuery : Maybe String
+        }
+        -> a
+        ->
+            { attributes : List attributeNever
+            , children : List htmlNever
+            }
+    , liDivider :
+        divider
+        ->
+            { attributes : List attributeNever
+            , children : List htmlNever
+            }
+    , empty : htmlNever
+    , focusable : Bool
+    }
+
+
+{-| TODO
+-}
+customView :
+    DomFunctions attribute attributeNever html htmlNever msg a
+    -> CustomViewConfig a divider attributeNever htmlNever
+    -> Instance a msg
+    -> List (Entry a divider)
+    -> Listbox
+    -> List a
+    -> html
+customView =
+    Internal.view True
+
+
+{-| TODO
+-}
+type alias DomFunctions attribute attributeNever html htmlNever msg a =
+    { ul : List attribute -> List html -> html
+    , li : List attribute -> List html -> html
+
+    -- EVENTS
+    , on : String -> Decoder msg -> attribute
+    , preventDefaultOn : String -> Decoder ( msg, Bool ) -> attribute
+
+    -- ATTRIBUTES
+    , tabindex : Int -> attribute
+    , id : String -> attribute
+    , listBox : attribute
+    , labelledBy : String -> attribute
+    , multiSelectable : Bool -> attribute
+    , option : attribute
+    , selected : Bool -> attribute
+    , activeDescendant : String -> attribute
+
+    -- FROM NEVER
+    , attributeFromNever : (Msg a -> msg) -> Msg a -> attributeNever -> attribute
+    , htmlFromNever : (Msg a -> msg) -> Msg a -> htmlNever -> html
+    }
+
+
+{-| TODO
+-}
+customPreventDefaultOnKeyDown :
+    (String -> Decoder ( msg, Bool ) -> attribute)
+    -> Instance a msg
+    -> Decoder ( msg, Bool )
+    -> attribute
+customPreventDefaultOnKeyDown =
     Internal.preventDefaultOnKeyDown
 
 

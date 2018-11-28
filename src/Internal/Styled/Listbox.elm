@@ -33,7 +33,6 @@ import Accessibility.Styled.Role as Role
 import Accessibility.Styled.Widget as Widget
 import Browser.Dom as Dom
 import Dict
-import Html.Keyed
 import Html.Styled as Html exposing (Html)
 import Html.Styled.Attributes as Attributes
 import Html.Styled.Events as Events

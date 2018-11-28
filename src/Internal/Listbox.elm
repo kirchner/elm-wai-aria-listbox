@@ -1,5 +1,6 @@
 module Internal.Listbox exposing
     ( Behaviour
+    , DomFunctions
     , Effect(..)
     , Entry(..)
     , Focus(..)
@@ -28,16 +29,8 @@ module Internal.Listbox exposing
     , view
     )
 
-import Accessibility.Aria as Aria
-import Accessibility.Role as Role
-import Accessibility.Widget as Widget
 import Browser.Dom as Dom
 import Dict
-import Html exposing (Html)
-import Html.Attributes as Attributes
-import Html.Events as Events
-import Html.Keyed
-import Html.Lazy as Html
 import Internal.KeyInfo as KeyInfo exposing (KeyInfo)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Decode.Pipeline as Decode
@@ -266,14 +259,14 @@ scrollToFocus behaviour id listbox =
 ---- VIEW CONFIG
 
 
-type alias ViewConfig a divider =
+type alias ViewConfig a divider attributeNever htmlNever =
     { uniqueId : a -> String
-    , views : Views a divider
+    , views : Views a divider attributeNever htmlNever
     }
 
 
-type alias Views a divider =
-    { ul : HtmlAttributes
+type alias Views a divider attributeNever htmlNever =
+    { ul : DomAttributes attributeNever
     , liOption :
         { selected : Bool
         , focused : Bool
@@ -281,20 +274,44 @@ type alias Views a divider =
         , maybeQuery : Maybe String
         }
         -> a
-        -> HtmlDetails
-    , liDivider : divider -> HtmlDetails
-    , empty : Html Never
+        -> DomDetails attributeNever htmlNever
+    , liDivider : divider -> DomDetails attributeNever htmlNever
+    , empty : htmlNever
     , focusable : Bool
     }
 
 
-type alias HtmlAttributes =
-    List (Html.Attribute Never)
+type alias DomAttributes attributeNever =
+    List attributeNever
 
 
-type alias HtmlDetails =
-    { attributes : List (Html.Attribute Never)
-    , children : List (Html Never)
+type alias DomDetails attributeNever htmlNever =
+    { attributes : List attributeNever
+    , children : List htmlNever
+    }
+
+
+type alias DomFunctions attribute attributeNever html htmlNever msg a =
+    { ul : List attribute -> List html -> html
+    , li : List attribute -> List html -> html
+
+    -- EVENTS
+    , on : String -> Decoder msg -> attribute
+    , preventDefaultOn : String -> Decoder ( msg, Bool ) -> attribute
+
+    -- ATTRIBUTES
+    , tabindex : Int -> attribute
+    , id : String -> attribute
+    , listBox : attribute
+    , labelledBy : String -> attribute
+    , multiSelectable : Bool -> attribute
+    , option : attribute
+    , selected : Bool -> attribute
+    , activeDescendant : String -> attribute
+
+    -- FROM NEVER
+    , attributeFromNever : (Msg a -> msg) -> Msg a -> attributeNever -> attribute
+    , htmlFromNever : (Msg a -> msg) -> Msg a -> htmlNever -> html
     }
 
 
@@ -337,13 +354,14 @@ type alias Instance a msg =
 
 view :
     Bool
-    -> ViewConfig a divider
+    -> DomFunctions attribute attributeNever html htmlNever msg a
+    -> ViewConfig a divider attributeNever htmlNever
     -> Instance a msg
     -> List (Entry a divider)
     -> Listbox
     -> List a
-    -> Html msg
-view multiSelectable config instance allEntries listbox selection =
+    -> html
+view multiSelectable dom config instance allEntries listbox selection =
     let
         { id, lift, labelledBy } =
             instance
@@ -357,19 +375,28 @@ view multiSelectable config instance allEntries listbox selection =
                     let
                         maybeHash =
                             Just (uniqueId option)
+
+                        focused =
+                            currentFocus listbox.focus == maybeHash
+
+                        hovered =
+                            listbox.hover == maybeHash
+
+                        selected =
+                            List.any ((==) option) selection
                     in
-                    Html.lazy8 viewEntry
+                    viewEntry dom
                         multiSelectable
-                        (currentFocus listbox.focus == maybeHash)
-                        (listbox.hover == maybeHash)
-                        (List.any ((==) option) selection)
+                        focused
+                        hovered
+                        selected
                         config
                         instance
                         listbox.query
                         entry
 
                 Divider _ ->
-                    Html.lazy8 viewEntry
+                    viewEntry dom
                         multiSelectable
                         False
                         False
@@ -379,38 +406,39 @@ view multiSelectable config instance allEntries listbox selection =
                         listbox.query
                         entry
     in
-    Html.ul
-        ([ Attributes.id (printListId id)
-         , Role.listBox
-         , Aria.labelledBy labelledBy
-         , Widget.multiSelectable multiSelectable
-         , Events.preventDefaultOn "keydown" <|
+    dom.ul
+        ([ dom.id (printListId id)
+         , dom.listBox
+         , dom.labelledBy labelledBy
+         , dom.multiSelectable multiSelectable
+         , dom.preventDefaultOn "keydown" <|
             Decode.andThen
                 (listKeyPress False id >> Decode.map (\msg -> ( lift msg, True )))
                 KeyInfo.decoder
-         , Events.onMouseDown (lift ListMouseDown)
-         , Events.onMouseUp (lift ListMouseUp)
-         , Events.onFocus (lift (ListFocused id))
-         , Events.onBlur (lift ListBlured)
+         , dom.on "mousedown" (Decode.succeed (lift ListMouseDown))
+         , dom.on "mouseup" (Decode.succeed (lift ListMouseUp))
+         , dom.on "focus" (Decode.succeed (lift (ListFocused id)))
+         , dom.on "blur" (Decode.succeed (lift ListBlured))
          ]
-            |> setAriaActivedescendant id uniqueId (currentFocus listbox.focus) allEntries
-            |> setTabindex views.focusable
-            |> appendAttributes lift views.ul
+            |> setAriaActivedescendant dom.activeDescendant id uniqueId (currentFocus listbox.focus) allEntries
+            |> setTabindex dom.tabindex views.focusable
+            |> appendAttributes (dom.attributeFromNever lift NoOp) views.ul
         )
         (List.map viewEntryHelp allEntries)
 
 
 viewEntry :
-    Bool
+    DomFunctions attribute attributeNever html htmlNever msg a
     -> Bool
     -> Bool
     -> Bool
-    -> ViewConfig a divider
+    -> Bool
+    -> ViewConfig a divider attributeNever htmlNever
     -> Instance a msg
     -> Query
     -> Entry a divider
-    -> Html msg
-viewEntry multiSelectable focused hovered selected config instance query entry =
+    -> html
+viewEntry dom multiSelectable focused hovered selected config instance query entry =
     let
         { uniqueId, views } =
             config
@@ -425,9 +453,6 @@ viewEntry multiSelectable focused hovered selected config instance query entry =
 
                 Query _ _ text ->
                     Just text
-
-        mapNever =
-            List.map (Html.map (\_ -> lift NoOp))
     in
     case entry of
         Option option ->
@@ -446,34 +471,34 @@ viewEntry multiSelectable focused hovered selected config instance query entry =
 
                 addWidgetSelected attrs =
                     if multiSelectable then
-                        Widget.selected selected :: attrs
+                        dom.selected selected :: attrs
 
                     else if selected then
-                        Widget.selected True :: attrs
+                        dom.selected True :: attrs
 
                     else
                         attrs
             in
-            Html.li
-                ([ Events.onMouseEnter (lift (EntryMouseEntered hash))
-                 , Events.onMouseLeave (lift EntryMouseLeft)
-                 , Events.onClick (lift (EntryClicked option))
-                 , Attributes.id (printEntryId id hash)
-                 , Role.option
+            dom.li
+                ([ dom.on "mouseenter" (Decode.succeed (lift (EntryMouseEntered hash)))
+                 , dom.on "ouseleave" (Decode.succeed (lift EntryMouseLeft))
+                 , dom.on "click" (Decode.succeed (lift (EntryClicked option)))
+                 , dom.id (printEntryId id hash)
+                 , dom.option
                  ]
                     |> addWidgetSelected
-                    |> appendAttributes lift attributes
+                    |> appendAttributes (dom.attributeFromNever lift NoOp) attributes
                 )
-                (mapNever children)
+                (List.map (dom.htmlFromNever lift NoOp) children)
 
         Divider d ->
             let
                 { attributes, children } =
                     views.liDivider d
             in
-            Html.li
-                (appendAttributes lift attributes [])
-                (mapNever children)
+            dom.li
+                (appendAttributes (dom.attributeFromNever lift NoOp) attributes [])
+                (List.map (dom.htmlFromNever lift NoOp) children)
 
 
 listKeyPress : Bool -> String -> KeyInfo -> Decoder (Msg a)
@@ -579,9 +604,13 @@ listKeyPress fromOutside id { code, altDown, controlDown, metaDown, shiftDown } 
                 notHandlingThatKey
 
 
-preventDefaultOnKeyDown : Instance a msg -> Decoder ( msg, Bool ) -> Html.Attribute msg
-preventDefaultOnKeyDown { id, lift } keyDownDecoder =
-    Events.preventDefaultOn "keydown" <|
+preventDefaultOnKeyDown :
+    (String -> Decoder ( msg, Bool ) -> attribute)
+    -> Instance a msg
+    -> Decoder ( msg, Bool )
+    -> attribute
+preventDefaultOnKeyDown preventDefaultOn { id, lift } keyDownDecoder =
+    preventDefaultOn "keydown" <|
         Decode.oneOf
             [ keyDownDecoder
             , Decode.andThen
@@ -595,40 +624,41 @@ preventDefaultOnKeyDown { id, lift } keyDownDecoder =
 
 
 setAriaActivedescendant :
-    String
+    (String -> attribute)
+    -> String
     -> (a -> String)
     -> Maybe String
     -> List (Entry a divider)
-    -> List (Html.Attribute msg)
-    -> List (Html.Attribute msg)
-setAriaActivedescendant id uniqueId focus entries attrs =
+    -> List attribute
+    -> List attribute
+setAriaActivedescendant activeDescendant id uniqueId focus entries attrs =
     focus
         |> Maybe.andThen (find uniqueId entries)
         |> Maybe.map
             (\a ->
-                Aria.activeDescendant (printEntryId id (uniqueId a))
+                activeDescendant (printEntryId id (uniqueId a))
                     :: attrs
             )
         |> Maybe.withDefault attrs
 
 
-setTabindex : Bool -> List (Html.Attribute msg) -> List (Html.Attribute msg)
-setTabindex focusable attrs =
+setTabindex : (Int -> attribute) -> Bool -> List attribute -> List attribute
+setTabindex tabindex focusable attrs =
     if focusable then
-        Attributes.tabindex 0 :: attrs
+        tabindex 0 :: attrs
 
     else
         attrs
 
 
 appendAttributes :
-    (Msg a -> msg)
-    -> List (Html.Attribute Never)
-    -> List (Html.Attribute msg)
-    -> List (Html.Attribute msg)
-appendAttributes lift neverAttrs attrs =
+    (attributeNever -> attribute)
+    -> List attributeNever
+    -> List attribute
+    -> List attribute
+appendAttributes attributeFromNever neverAttrs attrs =
     neverAttrs
-        |> List.map (Attributes.map (\_ -> lift NoOp))
+        |> List.map attributeFromNever
         |> List.append attrs
 
 

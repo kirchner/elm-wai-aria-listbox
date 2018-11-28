@@ -33,8 +33,13 @@ TODO: link to ellie example
 
 -}
 
-import Html exposing (Html)
-import Internal.Listbox as Internal
+import Accessibility.Aria as Aria
+import Accessibility.Role as Role
+import Accessibility.Widget as Widget
+import Html exposing (Attribute, Html)
+import Html.Attributes as Attributes
+import Html.Events as Events
+import Internal.Listbox as Internal exposing (DomFunctions)
 import Json.Decode exposing (Decoder)
 import Listbox exposing (Entry, Listbox, Msg, UpdateConfig, ViewConfig)
 
@@ -56,7 +61,26 @@ view :
     -> Maybe a
     -> Html msg
 view config cfg entries listbox selection =
-    Internal.view False config cfg entries listbox (maybeToList selection)
+    Internal.view False htmlFunctions config cfg entries listbox (maybeToList selection)
+
+
+htmlFunctions : DomFunctions (Attribute msg) (Attribute Never) (Html msg) (Html Never) msg a
+htmlFunctions =
+    { ul = Html.ul
+    , li = Html.li
+    , on = Events.on
+    , preventDefaultOn = Events.preventDefaultOn
+    , tabindex = Attributes.tabindex
+    , id = Attributes.id
+    , listBox = Role.listBox
+    , labelledBy = Aria.labelledBy
+    , multiSelectable = Widget.multiSelectable
+    , option = Role.option
+    , selected = Widget.selected
+    , activeDescendant = Aria.activeDescendant
+    , htmlFromNever = \lift noOp -> Html.map (\_ -> lift noOp)
+    , attributeFromNever = \lift noOp -> Attributes.map (\_ -> lift noOp)
+    }
 
 
 {-| Use this function instead of `Listbox.update` if the user can only
