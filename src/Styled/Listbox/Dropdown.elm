@@ -3,6 +3,7 @@ module Styled.Listbox.Dropdown exposing
     , update, Msg, subscriptions
     , UpdateConfig, updateConfig, Behaviour
     , ViewConfig, viewConfig, Views
+    , focus
     )
 
 {-| This is a collapsible dropdown version of `Listbox`. The behaviour
@@ -21,6 +22,11 @@ TODO: add ellie example
 @docs UpdateConfig, updateConfig, Behaviour
 
 @docs ViewConfig, viewConfig, Views
+
+
+# DOM Stuff
+
+@docs focus
 
 -}
 
@@ -59,7 +65,7 @@ import Styled.Listbox as Listbox
         , TypeAhead
         )
 import Styled.Listbox.Unique as ListboxUnique
-import Task
+import Task exposing (Task)
 
 
 {-| Tracks the keyboard and mouse focus as well as the current query and
@@ -725,6 +731,14 @@ focusButton : String -> Cmd (Msg a)
 focusButton id =
     Dom.focus (printButtonId id)
         |> Task.attempt (\_ -> NoOp)
+
+
+{-| A task to give the dropdown button focus. The first argument must match the
+`id` field used in the `Instance` for the `view` function!
+-}
+focus : String -> Task Dom.Error ()
+focus id =
+    Dom.focus (printButtonId id)
 
 
 
