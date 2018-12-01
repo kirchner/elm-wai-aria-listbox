@@ -67,22 +67,22 @@ view config cfg entries listbox selection =
     Internal.view False htmlFunctions config cfg entries listbox (maybeToList selection)
 
 
-htmlFunctions : DomFunctions (Attribute msg) (Attribute Never) (Html msg) (Html Never) msg a
+htmlFunctions : DomFunctions (Attribute msg) (Attribute Never) (Html msg) (Html Never) msg
 htmlFunctions =
     { ul = Html.ul
     , li = Html.li
     , on = Events.on
     , preventDefaultOn = Events.preventDefaultOn
     , attribute = Attributes.attribute
-    , htmlMap = \lift noOp -> Html.map (\_ -> lift noOp)
-    , attributeMap = \lift noOp -> Attributes.map (\_ -> lift noOp)
+    , htmlMap = \noOp -> Html.map (\_ -> noOp)
+    , attributeMap = \noOp -> Attributes.map (\_ -> noOp)
     }
 
 
 {-| TODO
 -}
 customView :
-    DomFunctions attribute attributeNever html htmlNever msg a
+    DomFunctions attribute attributeNever html htmlNever msg
     -> CustomViewConfig a divider attributeNever htmlNever
     ->
         { id : String

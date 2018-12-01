@@ -113,14 +113,14 @@ view model =
                     [ Html.text "Fruits" ]
                 , Html.div
                     [ Attributes.class "control" ]
-                    [ Html.map DropdownMsg <|
-                        Dropdown.view viewConfig
-                            { id = "fruits"
-                            , labelledBy = "fruits-label"
-                            }
-                            fruits
-                            model.dropdown
-                            model.selection
+                    [ Dropdown.view viewConfig
+                        { id = "fruits"
+                        , labelledBy = "fruits-label"
+                        , lift = DropdownMsg
+                        }
+                        fruits
+                        model.dropdown
+                        model.selection
                     ]
                 , Html.p
                     [ Attributes.class "help" ]

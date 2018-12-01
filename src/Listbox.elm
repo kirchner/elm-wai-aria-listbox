@@ -76,7 +76,7 @@ interactions this widget offers.
 @docs preventDefaultOnKeyDown
 
 
-## Different DOM libraries
+## Using different DOM libraries
 
 You can use these functions if you want to use other DOM libraries, like for
 example `rtfeldman/elm-css`.
@@ -541,15 +541,15 @@ view config instance allEntries listbox selection =
     Internal.view True htmlFunctions config instance allEntries listbox selection
 
 
-htmlFunctions : DomFunctions (Attribute msg) (Attribute Never) (Html msg) (Html Never) msg a
+htmlFunctions : DomFunctions (Attribute msg) (Attribute Never) (Html msg) (Html Never) msg
 htmlFunctions =
     { ul = Html.ul
     , li = Html.li
     , on = Events.on
     , preventDefaultOn = Events.preventDefaultOn
     , attribute = Attributes.attribute
-    , attributeMap = \lift noOp -> Attributes.map (\_ -> lift noOp)
-    , htmlMap = \lift noOp -> Html.map (\_ -> lift noOp)
+    , attributeMap = \noOp -> Attributes.map (\_ -> noOp)
+    , htmlMap = \noOp -> Html.map (\_ -> noOp)
     }
 
 
@@ -631,7 +631,7 @@ type alias CustomViews a divider attributeNever htmlNever =
 {-| TODO
 -}
 customView :
-    DomFunctions attribute attributeNever html htmlNever msg a
+    DomFunctions attribute attributeNever html htmlNever msg
     -> CustomViewConfig a divider attributeNever htmlNever
     -> Instance a msg
     -> List (Entry a divider)
@@ -644,14 +644,14 @@ customView =
 
 {-| TODO
 -}
-type alias DomFunctions attribute attributeNever html htmlNever msg a =
+type alias DomFunctions attribute attributeNever html htmlNever msg =
     { ul : List attribute -> List html -> html
     , li : List attribute -> List html -> html
     , on : String -> Decoder msg -> attribute
     , preventDefaultOn : String -> Decoder ( msg, Bool ) -> attribute
     , attribute : String -> String -> attribute
-    , attributeMap : (Msg a -> msg) -> Msg a -> attributeNever -> attribute
-    , htmlMap : (Msg a -> msg) -> Msg a -> htmlNever -> html
+    , attributeMap : msg -> attributeNever -> attribute
+    , htmlMap : msg -> htmlNever -> html
     }
 
 

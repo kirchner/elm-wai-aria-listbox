@@ -291,14 +291,14 @@ type alias DomDetails attributeNever htmlNever =
     }
 
 
-type alias DomFunctions attribute attributeNever html htmlNever msg a =
+type alias DomFunctions attribute attributeNever html htmlNever msg =
     { ul : List attribute -> List html -> html
     , li : List attribute -> List html -> html
     , attribute : String -> String -> attribute
     , on : String -> Decoder msg -> attribute
     , preventDefaultOn : String -> Decoder ( msg, Bool ) -> attribute
-    , attributeMap : (Msg a -> msg) -> Msg a -> attributeNever -> attribute
-    , htmlMap : (Msg a -> msg) -> Msg a -> htmlNever -> html
+    , attributeMap : msg -> attributeNever -> attribute
+    , htmlMap : msg -> htmlNever -> html
     }
 
 
@@ -341,7 +341,7 @@ type alias Instance a msg =
 
 view :
     Bool
-    -> DomFunctions attribute attributeNever html htmlNever msg a
+    -> DomFunctions attribute attributeNever html htmlNever msg
     -> ViewConfig a divider attributeNever htmlNever
     -> Instance a msg
     -> List (Entry a divider)
@@ -409,13 +409,13 @@ view multiSelectable dom config instance allEntries listbox selection =
          ]
             |> setAriaActivedescendant dom.attribute id uniqueId (currentFocus listbox.focus) allEntries
             |> setTabindex dom.attribute views.focusable
-            |> appendAttributes (dom.attributeMap lift NoOp) views.ul
+            |> appendAttributes (dom.attributeMap (lift NoOp)) views.ul
         )
         (List.map viewEntryHelp allEntries)
 
 
 viewEntry :
-    DomFunctions attribute attributeNever html htmlNever msg a
+    DomFunctions attribute attributeNever html htmlNever msg
     -> Bool
     -> Bool
     -> Bool
@@ -474,9 +474,9 @@ viewEntry dom multiSelectable focused hovered selected config instance query ent
                  , dom.on "click" (Decode.succeed (lift (EntryClicked option)))
                  ]
                     |> addWidgetSelected
-                    |> appendAttributes (dom.attributeMap lift NoOp) attributes
+                    |> appendAttributes (dom.attributeMap (lift NoOp)) attributes
                 )
-                (List.map (dom.htmlMap lift NoOp) children)
+                (List.map (dom.htmlMap (lift NoOp)) children)
 
         Divider d ->
             let
@@ -484,8 +484,8 @@ viewEntry dom multiSelectable focused hovered selected config instance query ent
                     views.liDivider d
             in
             dom.li
-                (appendAttributes (dom.attributeMap lift NoOp) attributes [])
-                (List.map (dom.htmlMap lift NoOp) children)
+                (appendAttributes (dom.attributeMap (lift NoOp)) attributes [])
+                (List.map (dom.htmlMap (lift NoOp)) children)
 
 
 listKeyPress : Bool -> String -> KeyInfo -> Decoder (Msg a)

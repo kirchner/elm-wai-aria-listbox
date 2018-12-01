@@ -3,6 +3,8 @@ module Listbox.Dropdown exposing
     , update, Msg, subscriptions
     , UpdateConfig, updateConfig, Behaviour
     , ViewConfig, viewConfig, Views
+    , customView, DomFunctions
+    , CustomViewConfig(..), customViewConfig, CustomViews
     )
 
 {-| This is a collapsible dropdown version of `Listbox`. The behaviour
@@ -21,6 +23,13 @@ TODO: add ellie example
 @docs UpdateConfig, updateConfig, Behaviour
 
 @docs ViewConfig, viewConfig, Views
+
+
+# Using different DOM libraries
+
+@docs customView, DomFunctions
+
+@docs CustomViewConfig, customViewConfig, CustomViews
 
 -}
 
@@ -45,7 +54,7 @@ TODO: add ellie example
 import Accessibility.Aria as Aria
 import Accessibility.Widget as Widget
 import Browser.Dom as Dom
-import Html exposing (Html)
+import Html exposing (Attribute, Html)
 import Html.Attributes as Attributes
 import Html.Events as Events
 import Internal.KeyInfo as KeyInfo exposing (KeyInfo)
@@ -304,9 +313,10 @@ this information to the `view` function:
     the listbox.
 
 -}
-type alias Instance =
+type alias Instance msg a =
     { id : String
     , labelledBy : String
+    , lift : Msg a -> msg
     }
 
 
@@ -338,13 +348,134 @@ a dropdown. You have to provide a `ViewConfig` for the styling and an
 -}
 view :
     ViewConfig a divider
-    -> Instance
+    -> Instance msg a
     -> List (Entry a divider)
     -> Dropdown
     -> Maybe a
-    -> Html (Msg a)
-view (ViewConfig uniqueId views) ids allEntries (Dropdown data) maybeSelection =
+    -> Html msg
+view (ViewConfig uniqueId views) =
+    customView htmlFunctions
+        (CustomViewConfig uniqueId
+            { container = views.container
+            , button = views.button
+            , ul = views.ul
+            , liOption = views.liOption
+            , liDivider = views.liDivider
+            }
+        )
+
+
+htmlFunctions =
+    { div =
+        \attributes { button, ul } ->
+            Html.div attributes
+                [ button
+                , ul
+                ]
+    , text = Html.text
+    , button = Html.button
+    , ul = Html.ul
+    , li = Html.li
+    , on = Events.on
+    , preventDefaultOn = Events.preventDefaultOn
+    , attribute = Attributes.attribute
+    , style = Attributes.style
+    , attributeMap = \noOp -> Attributes.map (\_ -> noOp)
+    , htmlMap = \noOp -> Html.map (\_ -> noOp)
+    }
+
+
+
+---- CUSTOM VIEW
+
+
+{-| TODO
+-}
+type CustomViewConfig a divider attributeNever htmlNever
+    = CustomViewConfig (a -> String) (CustomViews a divider attributeNever htmlNever)
+
+
+{-| TODO
+-}
+customViewConfig :
+    (a -> String)
+    -> CustomViews a divider attributeNever htmlNever
+    -> CustomViewConfig a divider attributeNever htmlNever
+customViewConfig =
+    CustomViewConfig
+
+
+{-| TODO
+-}
+type alias CustomViews a divider attributeNever htmlNever =
+    { container : List attributeNever
+    , button :
+        { maybeSelection : Maybe a
+        , open : Bool
+        }
+        ->
+            { attributes : List attributeNever
+            , children : List htmlNever
+            }
+    , ul : List attributeNever
+    , liOption :
+        { selected : Bool
+        , focused : Bool
+        , hovered : Bool
+        , maybeQuery : Maybe String
+        }
+        -> a
+        ->
+            { attributes : List attributeNever
+            , children : List htmlNever
+            }
+    , liDivider :
+        divider
+        ->
+            { attributes : List attributeNever
+            , children : List htmlNever
+            }
+    }
+
+
+{-| TODO
+-}
+type alias DomFunctions attribute attributeNever html htmlNever msg =
+    { div :
+        List attribute
+        ->
+            { button : html
+            , ul : html
+            }
+        -> html
+    , text : String -> htmlNever
+    , button : List attribute -> List html -> html
+    , ul : List attribute -> List html -> html
+    , li : List attribute -> List html -> html
+    , on : String -> Decoder msg -> attribute
+    , preventDefaultOn : String -> Decoder ( msg, Bool ) -> attribute
+    , attribute : String -> String -> attribute
+    , style : String -> String -> attributeNever
+    , attributeMap : msg -> attributeNever -> attribute
+    , htmlMap : msg -> htmlNever -> html
+    }
+
+
+{-| TODO
+-}
+customView :
+    DomFunctions attribute attributeNever html htmlNever msg
+    -> CustomViewConfig a divider attributeNever htmlNever
+    -> Instance msg a
+    -> List (Entry a divider)
+    -> Dropdown
+    -> Maybe a
+    -> html
+customView dom config instance allEntries (Dropdown data) maybeSelection =
     let
+        (CustomViewConfig uniqueId views) =
+            config
+
         buttonHtmlDetails =
             views.button
                 { maybeSelection = maybeSelection
@@ -352,132 +483,168 @@ view (ViewConfig uniqueId views) ids allEntries (Dropdown data) maybeSelection =
                 }
 
         listboxConfig =
-            Listbox.viewConfig uniqueId
+            Listbox.customViewConfig uniqueId
                 { ul =
                     if data.open then
-                        Attributes.style "position" "absolute" :: views.ul
+                        dom.style "position" "absolute" :: views.ul
 
                     else
-                        Attributes.style "display" "none"
-                            :: Attributes.style "position" "absolute"
+                        dom.style "display" "none"
+                            :: dom.style "position" "absolute"
                             :: views.ul
                 , liOption = views.liOption
                 , liDivider = views.liDivider
-                , empty = Html.text ""
+                , empty = dom.text ""
                 , focusable = True
                 }
     in
-    Html.div
-        (appendAttributes views.container
-            [ Events.onMouseDown ListboxMousePressed
-            , Events.onMouseUp (ListboxMouseReleased ids.id)
-            , Events.on "focusout"
-                (Decode.at [ "target", "id" ] Decode.string
-                    |> Decode.andThen
-                        (\targetId ->
-                            if targetId == printButtonId ids.id then
-                                Decode.fail "not handling that event here"
+    dom.div
+        ([ dom.on "mousedown" (Decode.succeed (instance.lift ListboxMousePressed))
+         , dom.on "mouseup" (Decode.succeed (instance.lift (ListboxMouseReleased instance.id)))
+         , dom.on "focusout"
+            (Decode.at [ "target", "id" ] Decode.string
+                |> Decode.andThen
+                    (\targetId ->
+                        if targetId == printButtonId instance.id then
+                            Decode.fail "not handling that event here"
 
-                            else
-                                Decode.succeed (ListboxBlured ids.id)
-                        )
-                )
-            , Events.on "keydown"
-                (KeyInfo.decoder
-                    |> Decode.andThen
-                        (\{ code, altDown, controlDown, metaDown, shiftDown } ->
-                            case code of
-                                "Escape" ->
-                                    if
-                                        not altDown
-                                            && not controlDown
-                                            && not metaDown
-                                            && not shiftDown
-                                    then
-                                        Decode.succeed (ListboxEscapePressed ids.id)
+                        else
+                            Decode.succeed (instance.lift (ListboxBlured instance.id))
+                    )
+            )
+         , dom.on "keydown"
+            (KeyInfo.decoder
+                |> Decode.andThen
+                    (\{ code, altDown, controlDown, metaDown, shiftDown } ->
+                        case code of
+                            "Escape" ->
+                                if
+                                    not altDown
+                                        && not controlDown
+                                        && not metaDown
+                                        && not shiftDown
+                                then
+                                    Decode.succeed (instance.lift (ListboxEscapePressed instance.id))
 
-                                    else
-                                        Decode.fail "not handling that key combination"
-
-                                "Enter" ->
-                                    if
-                                        not altDown
-                                            && not controlDown
-                                            && not metaDown
-                                            && not shiftDown
-                                    then
-                                        Decode.succeed (ListboxEnterPressed ids.id)
-
-                                    else
-                                        Decode.fail "not handling that key combination"
-
-                                _ ->
+                                else
                                     Decode.fail "not handling that key combination"
-                        )
-                )
-            ]
+
+                            "Enter" ->
+                                if
+                                    not altDown
+                                        && not controlDown
+                                        && not metaDown
+                                        && not shiftDown
+                                then
+                                    Decode.succeed (instance.lift (ListboxEnterPressed instance.id))
+
+                                else
+                                    Decode.fail "not handling that key combination"
+
+                            _ ->
+                                Decode.fail "not handling that key combination"
+                    )
+            )
+         ]
+            |> appendAttributes (dom.attributeMap (instance.lift NoOp)) views.container
         )
-        [ viewButton ids buttonHtmlDetails maybeSelection True
-        , ListboxUnique.view listboxConfig
-            { id = printListboxId ids.id
-            , labelledBy = ids.labelledBy
-            , lift = ListboxMsg (Just ids.id)
-            }
-            allEntries
-            data.listbox
-            maybeSelection
-        ]
+        { button = viewButton dom instance buttonHtmlDetails maybeSelection True
+        , ul =
+            ListboxUnique.customView
+                { ul = dom.ul
+                , li = dom.li
+                , attribute = dom.attribute
+                , on = dom.on
+                , preventDefaultOn = dom.preventDefaultOn
+                , attributeMap = dom.attributeMap
+                , htmlMap = dom.htmlMap
+                }
+                listboxConfig
+                { id = printListboxId instance.id
+                , labelledBy = instance.labelledBy
+                , lift = instance.lift << ListboxMsg (Just instance.id)
+                }
+                allEntries
+                data.listbox
+                maybeSelection
+        }
 
 
 viewButton :
-    { id : String
-    , labelledBy : String
-    }
-    -> HtmlDetails
+    DomFunctions attribute attributeNever html htmlNever msg
+    -> Instance msg a
+    -> { attributes : List attributeNever, children : List htmlNever }
     -> Maybe a
     -> Bool
-    -> Html (Msg a)
-viewButton ids { attributes, children } selection open =
+    -> html
+viewButton dom instance { attributes, children } selection open =
     let
+        { id, labelledBy, lift } =
+            instance
+
         setAriaExpanded attrs =
             if open then
-                Widget.expanded True :: attrs
+                dom.attribute "aria-expanded" "true" :: attrs
 
             else
-                attrs
+                dom.attribute "aria-expanded" "false" :: attrs
     in
-    Html.button
-        ([ Attributes.id (printButtonId ids.id)
-         , Attributes.type_ "button"
-         , Aria.labelledBy (printButtonId ids.id ++ " " ++ ids.labelledBy)
-         , Widget.hasListBoxPopUp
-         , Attributes.style "position" "relative"
-         , Attributes.tabindex 0
-         , Events.onClick (ButtonClicked ids)
-         , Events.on "keydown"
+    dom.button
+        ([ dom.attribute "id" (printButtonId id)
+         , dom.attribute "type" "button"
+         , dom.attribute "aria-labelledby" (printButtonId id ++ " " ++ labelledBy)
+         , dom.attribute "aria-haspopup" "listbox"
+         , dom.attribute "tabindex" "0"
+         , dom.on "keypress"
             (Decode.field "key" Decode.string
-                |> Decode.andThen (buttonKeyDown ids)
+                |> Decode.andThen
+                    (\key ->
+                        case key of
+                            "Space" ->
+                                Decode.succeed
+                                    (lift (ButtonClicked { id = id, labelledBy = labelledBy }))
+
+                            "Enter" ->
+                                Decode.succeed
+                                    (lift (ButtonClicked { id = id, labelledBy = labelledBy }))
+
+                            _ ->
+                                Decode.fail "not handling that key here"
+                    )
+            )
+         , dom.on "click"
+            (Decode.succeed
+                (lift (ButtonClicked { id = id, labelledBy = labelledBy }))
+            )
+         , dom.on "keydown"
+            (Decode.field "key" Decode.string
+                |> Decode.andThen (buttonKeyDown instance)
             )
          ]
             |> setAriaExpanded
-            |> appendAttributes attributes
+            |> appendAttributes (dom.attributeMap (lift NoOp))
+                (dom.style "position" "relative" :: attributes)
         )
-        (List.map (Html.map (\_ -> NoOp)) children)
+        (List.map (dom.htmlMap (lift NoOp)) children)
 
 
 buttonKeyDown :
-    { id : String
-    , labelledBy : String
-    }
+    Instance msg a
     -> String
-    -> Decoder (Msg a)
-buttonKeyDown ids code =
+    -> Decoder msg
+buttonKeyDown { id, labelledBy, lift } code =
+    let
+        ids =
+            { id = id
+            , labelledBy = labelledBy
+            }
+    in
     case code of
         "ArrowUp" ->
-            Decode.succeed (ButtonArrowUpPressed ids)
+            Decode.succeed (lift (ButtonArrowUpPressed ids))
 
         "ArrowDown" ->
-            Decode.succeed (ButtonArrowDownPressed ids)
+            Decode.succeed (lift (ButtonArrowDownPressed ids))
 
         _ ->
             Decode.fail "not handling that key here"
@@ -754,12 +921,13 @@ subscriptions (Dropdown data) =
 
 
 appendAttributes :
-    List (Html.Attribute Never)
-    -> List (Html.Attribute (Msg a))
-    -> List (Html.Attribute (Msg a))
-appendAttributes neverAttrs attrs =
+    (attributeNever -> attribute)
+    -> List attributeNever
+    -> List attribute
+    -> List attribute
+appendAttributes attributeMap neverAttrs attrs =
     neverAttrs
-        |> List.map (Attributes.map (\_ -> NoOp))
+        |> List.map attributeMap
         |> List.append attrs
 
 
