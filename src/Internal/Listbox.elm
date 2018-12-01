@@ -63,7 +63,8 @@ type Focus
     = NoFocus
     | Focus String
     | Pending
-        { current : String
+        { id : String
+        , current : String
         , pending : String
         , shiftDown : Bool
         }
@@ -655,6 +656,8 @@ appendAttributes attributeFromNever neverAttrs attrs =
 
 type Msg a
     = NoOp
+    | EntryDomDataReceived a (Result Dom.Error EntryDomData)
+    | ViewportOfListReceived Direction a (Result Dom.Error Dom.Viewport)
       -- LIST
     | ListMouseDown
     | ListMouseUp
@@ -683,8 +686,8 @@ type Msg a
 
 
 type Direction
-    = Top
-    | Bottom
+    = Up
+    | Down
 
 
 type Effect a
@@ -693,9 +696,20 @@ type Effect a
     | DomSetViewportOf String Float Float
     | DomFocus String
       -- SCROLLING
+    | GetViewportOfList (Result Dom.Error Dom.Viewport -> Msg a) String
     | ScrollListToTop String
     | ScrollListToBottom String
     | ScrollToOption (Behaviour a) String String (Maybe String)
+    | GetViewportOf (Result Dom.Error EntryDomData -> Msg a) (Behaviour a) String String String
+    | SetViewportOf String Float Float
+
+
+type alias EntryDomData =
+    { viewportList : Dom.Viewport
+    , elementList : Dom.Element
+    , elementLi : Dom.Element
+    , elementPreviousLi : Dom.Element
+    }
 
 
 update :
@@ -793,13 +807,15 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
                             | query = NoQuery
                             , focus =
                                 Pending
-                                    { current = current
+                                    { id = id
+                                    , current = current
                                     , pending = uniqueId a
                                     , shiftDown = shiftDown
                                     }
                         }
                             |> fromModel
-                            |> withEffect (ScrollListToBottom id)
+                            |> withEffect
+                                (GetViewportOfList (ViewportOfListReceived Up a) id)
 
                     else if behaviour.selectionFollowsFocus then
                         case find uniqueId allEntries current of
@@ -827,13 +843,14 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
                         | query = NoQuery
                         , focus =
                             Pending
-                                { current = current
+                                { id = id
+                                , current = current
                                 , pending = hash
                                 , shiftDown = shiftDown
                                 }
                     }
                         |> fromModel
-                        |> withEffect (ScrollToOption behaviour id hash (Just current))
+                        |> withEffect (GetViewportOf (EntryDomDataReceived a) behaviour id hash current)
 
                 Nothing ->
                     initFocus id
@@ -846,13 +863,15 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
                             | query = NoQuery
                             , focus =
                                 Pending
-                                    { current = current
+                                    { id = id
+                                    , current = current
                                     , pending = uniqueId a
                                     , shiftDown = shiftDown
                                     }
                         }
                             |> fromModel
-                            |> withEffect (ScrollListToTop id)
+                            |> withEffect
+                                (GetViewportOfList (ViewportOfListReceived Down a) id)
 
                     else if behaviour.selectionFollowsFocus then
                         case find uniqueId allEntries current of
@@ -880,18 +899,19 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
                         | query = NoQuery
                         , focus =
                             Pending
-                                { current = current
+                                { id = id
+                                , current = current
                                 , pending = hash
                                 , shiftDown = shiftDown
                                 }
                     }
                         |> fromModel
-                        |> withEffect (ScrollToOption behaviour id hash (Just current))
+                        |> withEffect (GetViewportOf (EntryDomDataReceived a) behaviour id hash current)
 
                 Nothing ->
                     initFocus id
 
-        focusScheduledFocus =
+        focusScheduledFocus a entryDomData =
             case listbox.focus of
                 NoFocus ->
                     unchanged
@@ -899,32 +919,144 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
                 Focus _ ->
                     unchanged
 
-                Pending { pending, shiftDown } ->
-                    case find uniqueId allEntries pending of
-                        Nothing ->
+                Pending { id, pending, shiftDown } ->
+                    let
+                        newListbox =
+                            { listbox | focus = Focus pending }
+
+                        ---- SCROLLING
+                        viewport =
+                            entryDomData.viewportList.viewport
+
+                        list =
+                            entryDomData.elementList
+
+                        li =
+                            entryDomData.elementLi
+
+                        previousLi =
+                            entryDomData.elementPreviousLi
+
+                        -- MEASUREMENTS
+                        liY =
+                            li.element.y - list.element.y + viewport.y
+
+                        liHeight =
+                            li.element.height
+
+                        previousLiY =
+                            previousLi.element.y - list.element.y + viewport.y
+
+                        previousLiHeight =
+                            previousLi.element.height
+
+                        -- CONDITIONS
+                        previousEntryHidden =
+                            (previousLiY + previousLiHeight < viewport.y)
+                                || (previousLiY > viewport.y + viewport.height)
+
+                        newEntryTooLow =
+                            liY + liHeight + behaviour.minimalGap > viewport.y + viewport.height
+
+                        newEntryTooHigh =
+                            liY - behaviour.minimalGap < viewport.y
+
+                        -- EFFECT
+                        ( x, y ) =
+                            if previousEntryHidden then
+                                ( viewport.x
+                                , liY + liHeight / 2 - viewport.height / 2
+                                )
+
+                            else if newEntryTooLow then
+                                ( viewport.x
+                                , liY + liHeight - viewport.height + behaviour.initialGap
+                                )
+
+                            else if newEntryTooHigh then
+                                ( viewport.x
+                                , liY - behaviour.initialGap
+                                )
+
+                            else
+                                ( viewport.x
+                                , viewport.y
+                                )
+                    in
+                    if behaviour.selectionFollowsFocus && not shiftDown then
+                        newListbox
+                            |> fromModel
+                            |> withSelection [ a ]
+                            |> withEffect (SetViewportOf id x y)
+
+                    else if shiftDown then
+                        newListbox
+                            |> fromModel
+                            |> toggle a
+                            |> withEffect (SetViewportOf id x y)
+
+                    else
+                        fromModel newListbox
+                            |> withEffect (SetViewportOf id x y)
+    in
+    case msg of
+        NoOp ->
+            unchanged
+
+        EntryDomDataReceived a result ->
+            case result of
+                Err id ->
+                    unchanged
+
+                Ok entryDomData ->
+                    focusScheduledFocus a entryDomData
+
+        ViewportOfListReceived direction a result ->
+            case result of
+                Err id ->
+                    unchanged
+
+                Ok viewport ->
+                    case listbox.focus of
+                        NoFocus ->
                             unchanged
 
-                        Just a ->
+                        Focus _ ->
+                            unchanged
+
+                        Pending { id, pending, shiftDown } ->
                             let
                                 newListbox =
                                     { listbox | focus = Focus pending }
+
+                                effect =
+                                    case direction of
+                                        Up ->
+                                            SetViewportOf id
+                                                viewport.viewport.x
+                                                viewport.scene.height
+
+                                        Down ->
+                                            SetViewportOf id
+                                                viewport.viewport.x
+                                                0
                             in
                             if behaviour.selectionFollowsFocus && not shiftDown then
                                 newListbox
                                     |> fromModel
                                     |> withSelection [ a ]
+                                    |> withEffect effect
 
                             else if shiftDown then
                                 newListbox
                                     |> fromModel
                                     |> toggle a
+                                    |> withEffect effect
 
                             else
-                                fromModel newListbox
-    in
-    case msg of
-        NoOp ->
-            focusScheduledFocus
+                                newListbox
+                                    |> fromModel
+                                    |> withEffect effect
 
         -- LIST
         ListMouseDown ->

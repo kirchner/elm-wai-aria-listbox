@@ -751,6 +751,10 @@ perform effect =
                 Dom.focus id
 
         -- SCROLLING
+        Internal.GetViewportOfList toMsg id ->
+            Dom.getViewportOf (Internal.printListId id)
+                |> Task.attempt toMsg
+
         Internal.ScrollListToTop id ->
             Dom.getViewportOf (Internal.printListId id)
                 |> Task.andThen
@@ -769,6 +773,18 @@ perform effect =
                             list.viewport.x
                             list.scene.height
                     )
+                |> Task.attempt (\_ -> Internal.NoOp)
+
+        Internal.GetViewportOf toMsg behaviour id hash previousHash ->
+            Task.map4 EntryDomData
+                (Dom.getViewportOf (Internal.printListId id))
+                (Dom.getElement (Internal.printListId id))
+                (Dom.getElement (Internal.printEntryId id hash))
+                (Dom.getElement (Internal.printEntryId id previousHash))
+                |> Task.attempt toMsg
+
+        Internal.SetViewportOf id x y ->
+            Dom.setViewportOf (Internal.printListId id) x y
                 |> Task.attempt (\_ -> Internal.NoOp)
 
         Internal.ScrollToOption behaviour id hash maybePreviousHash ->
