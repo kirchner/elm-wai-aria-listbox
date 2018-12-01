@@ -294,24 +294,11 @@ type alias DomDetails attributeNever htmlNever =
 type alias DomFunctions attribute attributeNever html htmlNever msg a =
     { ul : List attribute -> List html -> html
     , li : List attribute -> List html -> html
-
-    -- EVENTS
+    , attribute : String -> String -> attribute
     , on : String -> Decoder msg -> attribute
     , preventDefaultOn : String -> Decoder ( msg, Bool ) -> attribute
-
-    -- ATTRIBUTES
-    , tabindex : Int -> attribute
-    , id : String -> attribute
-    , listBox : attribute
-    , labelledBy : String -> attribute
-    , multiSelectable : Bool -> attribute
-    , option : attribute
-    , selected : Bool -> attribute
-    , activeDescendant : String -> attribute
-
-    -- FROM NEVER
-    , attributeFromNever : (Msg a -> msg) -> Msg a -> attributeNever -> attribute
-    , htmlFromNever : (Msg a -> msg) -> Msg a -> htmlNever -> html
+    , attributeMap : (Msg a -> msg) -> Msg a -> attributeNever -> attribute
+    , htmlMap : (Msg a -> msg) -> Msg a -> htmlNever -> html
     }
 
 
@@ -407,10 +394,10 @@ view multiSelectable dom config instance allEntries listbox selection =
                         entry
     in
     dom.ul
-        ([ dom.id (printListId id)
-         , dom.listBox
-         , dom.labelledBy labelledBy
-         , dom.multiSelectable multiSelectable
+        ([ dom.attribute "id" (printListId id)
+         , dom.attribute "role" "listbox"
+         , dom.attribute "aria-labelledby" labelledBy
+         , dom.attribute "aria-multiselectable" (stringFromBool multiSelectable)
          , dom.preventDefaultOn "keydown" <|
             Decode.andThen
                 (listKeyPress False id >> Decode.map (\msg -> ( lift msg, True )))
@@ -420,9 +407,9 @@ view multiSelectable dom config instance allEntries listbox selection =
          , dom.on "focus" (Decode.succeed (lift (ListFocused id)))
          , dom.on "blur" (Decode.succeed (lift ListBlured))
          ]
-            |> setAriaActivedescendant dom.activeDescendant id uniqueId (currentFocus listbox.focus) allEntries
-            |> setTabindex dom.tabindex views.focusable
-            |> appendAttributes (dom.attributeFromNever lift NoOp) views.ul
+            |> setAriaActivedescendant dom.attribute id uniqueId (currentFocus listbox.focus) allEntries
+            |> setTabindex dom.attribute views.focusable
+            |> appendAttributes (dom.attributeMap lift NoOp) views.ul
         )
         (List.map viewEntryHelp allEntries)
 
@@ -471,25 +458,25 @@ viewEntry dom multiSelectable focused hovered selected config instance query ent
 
                 addWidgetSelected attrs =
                     if multiSelectable then
-                        dom.selected selected :: attrs
+                        dom.attribute "aria-selected" (stringFromBool selected) :: attrs
 
                     else if selected then
-                        dom.selected True :: attrs
+                        dom.attribute "aria-selected" "true" :: attrs
 
                     else
                         attrs
             in
             dom.li
-                ([ dom.on "mouseenter" (Decode.succeed (lift (EntryMouseEntered hash)))
+                ([ dom.attribute "id" (printEntryId id hash)
+                 , dom.attribute "role" "option"
+                 , dom.on "mouseenter" (Decode.succeed (lift (EntryMouseEntered hash)))
                  , dom.on "ouseleave" (Decode.succeed (lift EntryMouseLeft))
                  , dom.on "click" (Decode.succeed (lift (EntryClicked option)))
-                 , dom.id (printEntryId id hash)
-                 , dom.option
                  ]
                     |> addWidgetSelected
-                    |> appendAttributes (dom.attributeFromNever lift NoOp) attributes
+                    |> appendAttributes (dom.attributeMap lift NoOp) attributes
                 )
-                (List.map (dom.htmlFromNever lift NoOp) children)
+                (List.map (dom.htmlMap lift NoOp) children)
 
         Divider d ->
             let
@@ -497,8 +484,8 @@ viewEntry dom multiSelectable focused hovered selected config instance query ent
                     views.liDivider d
             in
             dom.li
-                (appendAttributes (dom.attributeFromNever lift NoOp) attributes [])
-                (List.map (dom.htmlFromNever lift NoOp) children)
+                (appendAttributes (dom.attributeMap lift NoOp) attributes [])
+                (List.map (dom.htmlMap lift NoOp) children)
 
 
 listKeyPress : Bool -> String -> KeyInfo -> Decoder (Msg a)
@@ -624,28 +611,28 @@ preventDefaultOnKeyDown preventDefaultOn { id, lift } keyDownDecoder =
 
 
 setAriaActivedescendant :
-    (String -> attribute)
+    (String -> String -> attribute)
     -> String
     -> (a -> String)
     -> Maybe String
     -> List (Entry a divider)
     -> List attribute
     -> List attribute
-setAriaActivedescendant activeDescendant id uniqueId focus entries attrs =
+setAriaActivedescendant attribute id uniqueId focus entries attrs =
     focus
         |> Maybe.andThen (find uniqueId entries)
         |> Maybe.map
             (\a ->
-                activeDescendant (printEntryId id (uniqueId a))
+                attribute "aria-activedescendant" (printEntryId id (uniqueId a))
                     :: attrs
             )
         |> Maybe.withDefault attrs
 
 
-setTabindex : (Int -> attribute) -> Bool -> List attribute -> List attribute
-setTabindex tabindex focusable attrs =
+setTabindex : (String -> String -> attribute) -> Bool -> List attribute -> List attribute
+setTabindex attribute focusable attrs =
     if focusable then
-        tabindex 0 :: attrs
+        attribute "tabindex" "0" :: attrs
 
     else
         attrs
@@ -1586,3 +1573,16 @@ rangeHelp uniqueId collected end entries =
 
             else
                 rangeHelp uniqueId (a :: collected) end rest
+
+
+
+---- HELPER
+
+
+stringFromBool : Bool -> String
+stringFromBool bool =
+    if bool then
+        "true"
+
+    else
+        "false"

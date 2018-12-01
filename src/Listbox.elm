@@ -547,16 +547,9 @@ htmlFunctions =
     , li = Html.li
     , on = Events.on
     , preventDefaultOn = Events.preventDefaultOn
-    , tabindex = Attributes.tabindex
-    , id = Attributes.id
-    , listBox = Role.listBox
-    , labelledBy = Aria.labelledBy
-    , multiSelectable = Widget.multiSelectable
-    , option = Role.option
-    , selected = Widget.selected
-    , activeDescendant = Aria.activeDescendant
-    , htmlFromNever = \lift noOp -> Html.map (\_ -> lift noOp)
-    , attributeFromNever = \lift noOp -> Attributes.map (\_ -> lift noOp)
+    , attribute = Attributes.attribute
+    , attributeMap = \lift noOp -> Attributes.map (\_ -> lift noOp)
+    , htmlMap = \lift noOp -> Html.map (\_ -> lift noOp)
     }
 
 
@@ -654,24 +647,11 @@ customView =
 type alias DomFunctions attribute attributeNever html htmlNever msg a =
     { ul : List attribute -> List html -> html
     , li : List attribute -> List html -> html
-
-    -- EVENTS
     , on : String -> Decoder msg -> attribute
     , preventDefaultOn : String -> Decoder ( msg, Bool ) -> attribute
-
-    -- ATTRIBUTES
-    , tabindex : Int -> attribute
-    , id : String -> attribute
-    , listBox : attribute
-    , labelledBy : String -> attribute
-    , multiSelectable : Bool -> attribute
-    , option : attribute
-    , selected : Bool -> attribute
-    , activeDescendant : String -> attribute
-
-    -- FROM NEVER
-    , attributeFromNever : (Msg a -> msg) -> Msg a -> attributeNever -> attribute
-    , htmlFromNever : (Msg a -> msg) -> Msg a -> htmlNever -> html
+    , attribute : String -> String -> attribute
+    , attributeMap : (Msg a -> msg) -> Msg a -> attributeNever -> attribute
+    , htmlMap : (Msg a -> msg) -> Msg a -> htmlNever -> html
     }
 
 

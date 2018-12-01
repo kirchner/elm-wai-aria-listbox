@@ -1,6 +1,7 @@
 module Listbox.Unique exposing
     ( view, update
     , focusEntry, focusNextOrFirstEntry, focusPreviousOrFirstEntry
+    , customView
     )
 
 {-| This is a variant of `Listbox` allowing only **at most one**
@@ -12,6 +13,8 @@ TODO: link to ellie example
 @docs view, update
 
 @docs focusEntry, focusNextOrFirstEntry, focusPreviousOrFirstEntry
+
+@docs customView
 
 -}
 
@@ -41,7 +44,7 @@ import Html.Attributes as Attributes
 import Html.Events as Events
 import Internal.Listbox as Internal exposing (DomFunctions)
 import Json.Decode exposing (Decoder)
-import Listbox exposing (Entry, Listbox, Msg, UpdateConfig, ViewConfig)
+import Listbox exposing (CustomViewConfig, Entry, Listbox, Msg, UpdateConfig, ViewConfig)
 
 
 {-| Use this instead of `Listbox.view` if the user can only select **at
@@ -70,17 +73,28 @@ htmlFunctions =
     , li = Html.li
     , on = Events.on
     , preventDefaultOn = Events.preventDefaultOn
-    , tabindex = Attributes.tabindex
-    , id = Attributes.id
-    , listBox = Role.listBox
-    , labelledBy = Aria.labelledBy
-    , multiSelectable = Widget.multiSelectable
-    , option = Role.option
-    , selected = Widget.selected
-    , activeDescendant = Aria.activeDescendant
-    , htmlFromNever = \lift noOp -> Html.map (\_ -> lift noOp)
-    , attributeFromNever = \lift noOp -> Attributes.map (\_ -> lift noOp)
+    , attribute = Attributes.attribute
+    , htmlMap = \lift noOp -> Html.map (\_ -> lift noOp)
+    , attributeMap = \lift noOp -> Attributes.map (\_ -> lift noOp)
     }
+
+
+{-| TODO
+-}
+customView :
+    DomFunctions attribute attributeNever html htmlNever msg a
+    -> CustomViewConfig a divider attributeNever htmlNever
+    ->
+        { id : String
+        , labelledBy : String
+        , lift : Msg a -> msg
+        }
+    -> List (Entry a divider)
+    -> Listbox
+    -> Maybe a
+    -> html
+customView dom config cfg entries listbox selection =
+    Internal.view False dom config cfg entries listbox (maybeToList selection)
 
 
 {-| Use this function instead of `Listbox.update` if the user can only
