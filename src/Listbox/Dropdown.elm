@@ -860,7 +860,7 @@ update (UpdateConfig uniqueId behaviour) allEntries msg dropdown maybeSelection 
 
             else
                 ( Dropdown { data | open = False }
-                , focusButton id
+                , Cmd.none
                 , maybeSelection
                 )
 
