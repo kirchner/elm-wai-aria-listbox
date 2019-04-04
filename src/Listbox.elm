@@ -633,40 +633,11 @@ When using `mdgriffith/elm-ui`, you could define something like this:
 
     elementFunctions : DomFunctions (Attribute msg) (Attribute Never) (Element msg) (Element Never) msg
     elementFunctions =
-        let
-            attribute name value =
-                Element.htmlAttribute (Attributes.attribute name value)
-
-            style name value =
-                Element.htmlAttribute (Attributes.style name value)
-
-            on event decoder =
-                Element.htmlAttribute (Events.on event decoder)
-
-            preventDefaultOn event decoder =
-                Element.htmlAttribute (Events.preventDefaultOn event decoder)
-        in
         { ul = Element.column
         , li = Element.row
-        , button =
-            \attributes children ->
-                Input.button attributes
-                    { onPress = Nothing
-                    , label =
-                        Element.row
-                            [ Element.width Element.fill
-                            , Element.height Element.fill
-                            ]
-                            children
-                    }
-        , div =
-            \attributes children ->
-                Element.el (Element.below children.ul :: attributes) children.button
-        , style = style
-        , text = Element.text
-        , attribute = attribute
-        , on = on
-        , preventDefaultOn = preventDefaultOn
+        , on = Element.htmlAttribute (Events.on event decoder)
+        , preventDefaultOn = Element.htmlAttribute (Events.preventDefaultOn event decoder)
+        , attribute = Element.htmlAttribute (Attributes.attribute name value)
         , attributeMap = \noOp -> Element.mapAttribute (\_ -> noOp)
         , htmlMap = \noOp -> Element.map (\_ -> noOp)
         }
