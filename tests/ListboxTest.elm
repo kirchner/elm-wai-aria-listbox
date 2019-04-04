@@ -602,9 +602,6 @@ update updateConfig msg model =
         TimeNow toMsg ->
             update updateConfig (toMsg model.now) newModel
 
-        DomSetViewportOf _ _ _ ->
-            newModel
-
         DomFocus targetId ->
             if targetId == Listbox.printListId id then
                 update updateConfig (ListFocused id) newModel

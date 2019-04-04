@@ -694,7 +694,6 @@ type Direction
 type Effect a
     = CmdNone
     | TimeNow (Posix -> Msg a)
-    | DomSetViewportOf String Float Float
     | DomFocus String
       -- SCROLLING
     | GetViewportOfList (Result Dom.Error Dom.Viewport -> Msg a) String

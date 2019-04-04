@@ -742,10 +742,6 @@ perform effect =
         Internal.TimeNow toMsg ->
             Task.perform toMsg Time.now
 
-        Internal.DomSetViewportOf id x y ->
-            Task.attempt (\_ -> Internal.NoOp) <|
-                Dom.setViewportOf id x y
-
         Internal.DomFocus id ->
             Task.attempt (\_ -> Internal.NoOp) <|
                 Dom.focus id
