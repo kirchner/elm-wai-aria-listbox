@@ -88,13 +88,15 @@ functionTests updateConfig =
     concat
         [ describe "initial Listbox"
             [ fuzz entriesFuzzer "has no hoveredEntry" <|
-                Listbox.hoveredEntry updateConfig Listbox.init
-                    >> Expect.equal Nothing
+                \entries ->
+                    Listbox.hoveredEntry updateConfig entries Listbox.init
+                        |> Expect.equal Nothing
             ]
         , describe "focusedEntry"
             [ fuzz entriesFuzzer "on initial Listbox" <|
-                Listbox.focusedEntry updateConfig Listbox.init
-                    >> Expect.equal Nothing
+                \entries ->
+                    Listbox.focusedEntry updateConfig entries Listbox.init
+                        |> Expect.equal Nothing
             , fuzz entriesWithKnownOptionFuzzer "after focusEntry" <|
                 \{ knownOption, entries } ->
                     let
@@ -107,7 +109,7 @@ functionTests updateConfig =
                                 Listbox.init
                                 selection
                     in
-                    Listbox.focusedEntry updateConfig listbox entries
+                    Listbox.focusedEntry updateConfig entries listbox
                         |> Expect.equal (Just knownOption)
             , describe "after focusNextOrFirstEntry"
                 [ fuzz2 Fuzz.string entriesFuzzer "on initial Listbox" <|
@@ -125,7 +127,7 @@ functionTests updateConfig =
                                     Listbox.init
                                     selection
                         in
-                        Listbox.focusedEntry updateConfig listbox actualEntries
+                        Listbox.focusedEntry updateConfig actualEntries listbox
                             |> Expect.equal (Just option)
                 ]
             , describe "after focusPreviousOrFirstEntry"
@@ -144,7 +146,7 @@ functionTests updateConfig =
                                     Listbox.init
                                     selection
                         in
-                        Listbox.focusedEntry updateConfig listbox actualEntries
+                        Listbox.focusedEntry updateConfig actualEntries listbox
                             |> Expect.equal (Just option)
                 ]
             ]

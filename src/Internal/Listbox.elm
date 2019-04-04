@@ -118,13 +118,13 @@ type Entry a divider
 ---- EXTERNAL STATE MANIPULATION
 
 
-focusedEntry : UpdateConfig a -> Listbox -> List (Entry a divider) -> Maybe a
-focusedEntry { uniqueId } listbox allEntries =
-    Maybe.andThen (find uniqueId allEntries) (currentFocus listbox.focus)
+focusedEntry : UpdateConfig a -> List (Entry a divider) -> Listbox -> Maybe a
+focusedEntry { uniqueId } allEntries { focus } =
+    Maybe.andThen (find uniqueId allEntries) (currentFocus focus)
 
 
-hoveredEntry : UpdateConfig a -> Listbox -> List (Entry a divider) -> Maybe a
-hoveredEntry { uniqueId } { hover } allEntries =
+hoveredEntry : UpdateConfig a -> List (Entry a divider) -> Listbox -> Maybe a
+hoveredEntry { uniqueId } allEntries { hover } =
     Maybe.andThen (find uniqueId allEntries) hover
 
 
@@ -1066,7 +1066,7 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
                     unchanged
 
         ListEnterDown id ->
-            case focusedEntry config listbox allEntries of
+            case focusedEntry config allEntries listbox of
                 Nothing ->
                     unchanged
 
@@ -1075,7 +1075,7 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
                         |> toggle a
 
         ListSpaceDown id ->
-            case focusedEntry config listbox allEntries of
+            case focusedEntry config allEntries listbox of
                 Nothing ->
                     unchanged
 

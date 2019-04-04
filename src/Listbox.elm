@@ -174,16 +174,24 @@ focus { id } =
 
 {-| Returns the option which currently has keyboard focus.
 -}
-focusedEntry : UpdateConfig a -> Listbox -> List (Entry a divider) -> Maybe a
-focusedEntry config listbox =
-    Internal.focusedEntry config listbox
+focusedEntry :
+    UpdateConfig a
+    -> List (Entry a divider)
+    -> Listbox
+    -> Maybe a
+focusedEntry =
+    Internal.focusedEntry
 
 
 {-| Returns the option which currently has mouse focus.
 -}
-hoveredEntry : UpdateConfig a -> Listbox -> List (Entry a divider) -> Maybe a
-hoveredEntry config listbox =
-    Internal.hoveredEntry config listbox
+hoveredEntry :
+    UpdateConfig a
+    -> List (Entry a divider)
+    -> Listbox
+    -> Maybe a
+hoveredEntry =
+    Internal.hoveredEntry
 
 
 {-| Sets the keyboard focus to the provided options.
@@ -192,7 +200,12 @@ hoveredEntry config listbox =
 want to apply `scrollToFocus` afterwards.
 
 -}
-focusEntry : UpdateConfig a -> a -> Listbox -> List a -> ( Listbox, List a )
+focusEntry :
+    UpdateConfig a
+    -> a
+    -> Listbox
+    -> List a
+    -> ( Listbox, List a )
 focusEntry config newEntry listbox selection =
     Internal.focusEntry config newEntry listbox selection
 
