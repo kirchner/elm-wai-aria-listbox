@@ -621,13 +621,14 @@ setAriaActivedescendant :
     -> List attribute
     -> List attribute
 setAriaActivedescendant attribute id uniqueId focus entries attrs =
+    let
+        setHelp a =
+            attribute "aria-activedescendant" (printEntryId id (uniqueId a))
+                :: attrs
+    in
     focus
         |> Maybe.andThen (find uniqueId entries)
-        |> Maybe.map
-            (\a ->
-                attribute "aria-activedescendant" (printEntryId id (uniqueId a))
-                    :: attrs
-            )
+        |> Maybe.map setHelp
         |> Maybe.withDefault attrs
 
 
@@ -910,94 +911,6 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
 
                 Nothing ->
                     initFocus id
-
-        focusScheduledFocus a entryDomData =
-            case listbox.focus of
-                NoFocus ->
-                    unchanged
-
-                Focus _ ->
-                    unchanged
-
-                Pending { id, pending, shiftDown } ->
-                    let
-                        newListbox =
-                            { listbox | focus = Focus pending }
-
-                        ---- SCROLLING
-                        viewport =
-                            entryDomData.viewportList.viewport
-
-                        list =
-                            entryDomData.elementList
-
-                        li =
-                            entryDomData.elementLi
-
-                        previousLi =
-                            entryDomData.elementPreviousLi
-
-                        -- MEASUREMENTS
-                        liY =
-                            li.element.y - list.element.y + viewport.y
-
-                        liHeight =
-                            li.element.height
-
-                        previousLiY =
-                            previousLi.element.y - list.element.y + viewport.y
-
-                        previousLiHeight =
-                            previousLi.element.height
-
-                        -- CONDITIONS
-                        previousEntryHidden =
-                            (previousLiY + previousLiHeight < viewport.y)
-                                || (previousLiY > viewport.y + viewport.height)
-
-                        newEntryTooLow =
-                            liY + liHeight + behaviour.minimalGap > viewport.y + viewport.height
-
-                        newEntryTooHigh =
-                            liY - behaviour.minimalGap < viewport.y
-
-                        -- EFFECT
-                        ( x, y ) =
-                            if previousEntryHidden then
-                                ( viewport.x
-                                , liY + liHeight / 2 - viewport.height / 2
-                                )
-
-                            else if newEntryTooLow then
-                                ( viewport.x
-                                , liY + liHeight - viewport.height + behaviour.initialGap
-                                )
-
-                            else if newEntryTooHigh then
-                                ( viewport.x
-                                , liY - behaviour.initialGap
-                                )
-
-                            else
-                                ( viewport.x
-                                , viewport.y
-                                )
-                    in
-                    if behaviour.selectionFollowsFocus && not shiftDown then
-                        newListbox
-                            |> fromModel
-                            |> withSelection [ a ]
-                            |> withEffect (SetViewportOf id x y)
-
-                    else if shiftDown then
-                        newListbox
-                            |> fromModel
-                            |> toggle a
-                            |> withEffect (SetViewportOf id x y)
-
-                    else
-                        fromModel newListbox
-                            |> withEffect (SetViewportOf id x y)
     in
     case msg of
         NoOp ->
@@ -1009,7 +922,36 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
                     unchanged
 
                 Ok entryDomData ->
-                    focusScheduledFocus a entryDomData
+                    case listbox.focus of
+                        NoFocus ->
+                            unchanged
+
+                        Focus _ ->
+                            unchanged
+
+                        Pending { id, pending, shiftDown } ->
+                            let
+                                newListbox =
+                                    { listbox | focus = Focus pending }
+
+                                ( x, y ) =
+                                    newPosition behaviour entryDomData
+                            in
+                            if behaviour.selectionFollowsFocus && not shiftDown then
+                                newListbox
+                                    |> fromModel
+                                    |> withSelection [ a ]
+                                    |> withEffect (SetViewportOf id x y)
+
+                            else if shiftDown then
+                                newListbox
+                                    |> fromModel
+                                    |> toggle a
+                                    |> withEffect (SetViewportOf id x y)
+
+                            else
+                                fromModel newListbox
+                                    |> withEffect (SetViewportOf id x y)
 
         ViewportOfListReceived direction a result ->
             case result of
@@ -1397,6 +1339,67 @@ focusPendingKeyboardFocus listbox =
 
         Pending { pending } ->
             { listbox | focus = Focus pending }
+
+
+newPosition : Behaviour a -> EntryDomData -> ( Float, Float )
+newPosition behaviour entryDomData =
+    let
+        ---- SCROLLING
+        viewport =
+            entryDomData.viewportList.viewport
+
+        list =
+            entryDomData.elementList
+
+        li =
+            entryDomData.elementLi
+
+        previousLi =
+            entryDomData.elementPreviousLi
+
+        -- MEASUREMENTS
+        liY =
+            li.element.y - list.element.y + viewport.y
+
+        liHeight =
+            li.element.height
+
+        previousLiY =
+            previousLi.element.y - list.element.y + viewport.y
+
+        previousLiHeight =
+            previousLi.element.height
+
+        -- CONDITIONS
+        previousEntryHidden =
+            (previousLiY + previousLiHeight < viewport.y)
+                || (previousLiY > viewport.y + viewport.height)
+
+        newEntryTooLow =
+            liY + liHeight + behaviour.minimalGap > viewport.y + viewport.height
+
+        newEntryTooHigh =
+            liY - behaviour.minimalGap < viewport.y
+    in
+    if previousEntryHidden then
+        ( viewport.x
+        , liY + liHeight / 2 - viewport.height / 2
+        )
+
+    else if newEntryTooLow then
+        ( viewport.x
+        , liY + liHeight - viewport.height + behaviour.initialGap
+        )
+
+    else if newEntryTooHigh then
+        ( viewport.x
+        , liY - behaviour.initialGap
+        )
+
+    else
+        ( viewport.x
+        , viewport.y
+        )
 
 
 
