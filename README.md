@@ -5,8 +5,7 @@
 This package offers an implementation of the [Listbox
 widget](https://www.w3.org/TR/wai-aria-practices-1.1/#Listbox) as specified in
 the [WAI-ARIA Authoring Practices
-1.1](https://www.w3.org/TR/wai-aria-practices-1.1/). ~~You can see an [example
-of it in action on Ellie](https://todo.org)~~, or take a look at the [demo
+1.1](https://www.w3.org/TR/wai-aria-practices-1.1/).  Take a look at the [demo
 page](https://kirchner.github.io/elm-wai-aria-listbox/).
 
 See more end-to-end example code in the `examples/` folder.
@@ -105,14 +104,14 @@ view model =
         [ Html.label
             [ Attributes.id "fruits-label" ]
             [ Html.text "Fruits" ]
-        , Html.map DropdownMsg <|
-            Dropdown.view viewConfig
-                { id = "fruits"
-                , labelledBy = "fruits-label"
-                }
-                fruits
-                model.dropdown
-                model.selection
+        , Dropdown.view viewConfig
+            { id = "fruits"
+            , labelledBy = "fruits-label"
+            , lift = DropdownMsg
+            }
+            fruits
+            model.dropdown
+            model.selection
         ]
 
 
@@ -160,7 +159,7 @@ viewConfig =
                       else
                         Attributes.style "color" "black"
                     ]
-                , children = \_ name -> [ Html.text name ]
+                , children = [ Html.text name ]
                 }
         , liDivider = Listbox.noDivider
         }
