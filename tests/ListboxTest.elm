@@ -9,6 +9,7 @@ import ArchitectureTest
         , msgTest
         , msgTestWithPrecondition
         )
+import Browser.Dom
 import Expect exposing (Expectation)
 import Fuzz exposing (Fuzzer)
 import Internal.Listbox as Listbox
@@ -619,6 +620,59 @@ update updateConfig msg model =
 
         ScrollToOption _ _ _ _ ->
             update updateConfig NoOp newModel
+
+        GetViewportOfList toMsg _ ->
+            update updateConfig (toMsg (Ok mockViewportOfList)) newModel
+
+        GetViewportOf toMsg _ _ _ _ ->
+            update updateConfig (toMsg (Ok mockEntryDomData)) newModel
+
+        SetViewportOf _ _ _ ->
+            update updateConfig NoOp newModel
+
+
+mockViewportOfList : Browser.Dom.Viewport
+mockViewportOfList =
+    { scene =
+        { width = 100
+        , height = 200
+        }
+    , viewport =
+        { x = 0
+        , y = 0
+        , width = 100
+        , height = 200
+        }
+    }
+
+
+mockEntryDomData : Listbox.EntryDomData
+mockEntryDomData =
+    let
+        element =
+            { scene =
+                { width = 100
+                , height = 200
+                }
+            , viewport =
+                { x = 0
+                , y = 0
+                , width = 100
+                , height = 200
+                }
+            , element =
+                { x = 0
+                , y = 0
+                , width = 100
+                , height = 200
+                }
+            }
+    in
+    { viewportList = mockViewportOfList
+    , elementList = element
+    , elementLi = element
+    , elementPreviousLi = element
+    }
 
 
 id : String

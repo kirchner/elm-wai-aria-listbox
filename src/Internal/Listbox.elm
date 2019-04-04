@@ -3,6 +3,7 @@ module Internal.Listbox exposing
     , DomFunctions
     , Effect(..)
     , Entry(..)
+    , EntryDomData
     , Focus(..)
     , Instance
     , Listbox
