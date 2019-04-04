@@ -79,7 +79,7 @@ interactions this widget offers.
 ## Using different DOM libraries
 
 You can use these functions if you want to use other DOM libraries, like for
-example `rtfeldman/elm-css`.
+example `rtfeldman/elm-css` or `mdgriffith/elm-ui`.
 
 @docs customView, DomFunctions
 
@@ -586,13 +586,97 @@ preventDefaultOnKeyDown =
 ---- CUSTOM DOM
 
 
-{-| TODO
+{-| Create a customized view function for the DOM library of your choice by
+providing some `DomFunctions`.
 -}
+customView :
+    DomFunctions attribute attributeNever html htmlNever msg
+    -> CustomViewConfig a divider attributeNever htmlNever
+    -> Instance a msg
+    -> List (Entry a divider)
+    -> Listbox
+    -> List a
+    -> html
+customView =
+    Internal.view True
+
+
+{-| This record holds all the DOM functions needed to render a listbox. It is
+probably instructive to look at the version for the standard `elm/html`
+package:
+
+    htmlFunctions : DomFunctions (Attribute msg) (Attribute Never) (Html msg) (Html Never) msg
+    htmlFunctions =
+        { ul = Html.ul
+        , li = Html.li
+        , on = Events.on
+        , preventDefaultOn = Events.preventDefaultOn
+        , attribute = Attributes.attribute
+        , attributeMap = \noOp -> Attributes.map (\_ -> noOp)
+        , htmlMap = \noOp -> Html.map (\_ -> noOp)
+        }
+
+When using `mdgriffith/elm-ui`, you could define something like this:
+
+    elementFunctions : DomFunctions (Attribute msg) (Attribute Never) (Element msg) (Element Never) msg
+    elementFunctions =
+        let
+            attribute name value =
+                Element.htmlAttribute (Attributes.attribute name value)
+
+            style name value =
+                Element.htmlAttribute (Attributes.style name value)
+
+            on event decoder =
+                Element.htmlAttribute (Events.on event decoder)
+
+            preventDefaultOn event decoder =
+                Element.htmlAttribute (Events.preventDefaultOn event decoder)
+        in
+        { ul = Element.column
+        , li = Element.row
+        , button =
+            \attributes children ->
+                Input.button attributes
+                    { onPress = Nothing
+                    , label =
+                        Element.row
+                            [ Element.width Element.fill
+                            , Element.height Element.fill
+                            ]
+                            children
+                    }
+        , div =
+            \attributes children ->
+                Element.el (Element.below children.ul :: attributes) children.button
+        , style = style
+        , text = Element.text
+        , attribute = attribute
+        , on = on
+        , preventDefaultOn = preventDefaultOn
+        , attributeMap = \noOp -> Element.mapAttribute (\_ -> noOp)
+        , htmlMap = \noOp -> Element.map (\_ -> noOp)
+        }
+
+-}
+type alias DomFunctions attribute attributeNever html htmlNever msg =
+    { ul : List attribute -> List html -> html
+    , li : List attribute -> List html -> html
+    , on : String -> Decoder msg -> attribute
+    , preventDefaultOn : String -> Decoder ( msg, Bool ) -> attribute
+    , attribute : String -> String -> attribute
+    , attributeMap : msg -> attributeNever -> attribute
+    , htmlMap : msg -> htmlNever -> html
+    }
+
+
+{-| -}
 type alias CustomViewConfig a divider attributeNever htmlNever =
     Internal.ViewConfig a divider attributeNever htmlNever
 
 
-{-| TODO
+{-| A replacement for `viewConfig` when you are using your own `customView`
+function.
 -}
 customViewConfig :
     (a -> String)
@@ -602,7 +686,8 @@ customViewConfig =
     Internal.ViewConfig
 
 
-{-| TODO
+{-| A replacement for `Views` when you are using your own `customView`
+function. Take a look at its documentation for a description of each field.
 -}
 type alias CustomViews a divider attributeNever htmlNever =
     { ul : List attributeNever
@@ -628,34 +713,8 @@ type alias CustomViews a divider attributeNever htmlNever =
     }
 
 
-{-| TODO
--}
-customView :
-    DomFunctions attribute attributeNever html htmlNever msg
-    -> CustomViewConfig a divider attributeNever htmlNever
-    -> Instance a msg
-    -> List (Entry a divider)
-    -> Listbox
-    -> List a
-    -> html
-customView =
-    Internal.view True
-
-
-{-| TODO
--}
-type alias DomFunctions attribute attributeNever html htmlNever msg =
-    { ul : List attribute -> List html -> html
-    , li : List attribute -> List html -> html
-    , on : String -> Decoder msg -> attribute
-    , preventDefaultOn : String -> Decoder ( msg, Bool ) -> attribute
-    , attribute : String -> String -> attribute
-    , attributeMap : msg -> attributeNever -> attribute
-    , htmlMap : msg -> htmlNever -> html
-    }
-
-
-{-| TODO
+{-| A replacement for `preventDefaultOn` when you are using your own
+`customView` function.
 -}
 customPreventDefaultOnKeyDown :
     (String -> Decoder ( msg, Bool ) -> attribute)
