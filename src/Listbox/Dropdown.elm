@@ -365,6 +365,7 @@ view (ViewConfig uniqueId views) =
         )
 
 
+htmlFunctions : DomFunctions (Attribute msg) (Attribute Never) (Html msg) (Html Never) msg
 htmlFunctions =
     { div =
         \attributes { button, ul } ->
@@ -389,13 +390,13 @@ htmlFunctions =
 ---- CUSTOM VIEW
 
 
-{-| TODO
--}
+{-| -}
 type CustomViewConfig a divider attributeNever htmlNever
     = CustomViewConfig (a -> String) (CustomViews a divider attributeNever htmlNever)
 
 
-{-| TODO
+{-| A replacement for `Views` when you are using your own `customView`
+function. Take a look at its documentation for a description of each field.
 -}
 customViewConfig :
     (a -> String)
@@ -405,7 +406,8 @@ customViewConfig =
     CustomViewConfig
 
 
-{-| TODO
+{-| A replacement for `Views` when you are using your own `customView`
+function. Take a look at its documentation for a description of each field.
 -}
 type alias CustomViews a divider attributeNever htmlNever =
     { container : List attributeNever
@@ -438,7 +440,59 @@ type alias CustomViews a divider attributeNever htmlNever =
     }
 
 
-{-| TODO
+{-| This record holds all the DOM functions needed to render a listbox. It is
+probably instructive to look at the version for the standard `elm/html`
+package:
+
+    htmlFunctions : DomFunctions (Attribute msg) (Attribute Never) (Html msg) (Html Never) msg
+    htmlFunctions =
+        { div =
+            \attributes { button, ul } ->
+                Html.div attributes
+                    [ button
+                    , ul
+                    ]
+        , text = Html.text
+        , button = Html.button
+        , ul = Html.ul
+        , li = Html.li
+        , on = Events.on
+        , preventDefaultOn = Events.preventDefaultOn
+        , attribute = Attributes.attribute
+        , style = Attributes.style
+        , attributeMap = \noOp -> Attributes.map (\_ -> noOp)
+        , htmlMap = \noOp -> Html.map (\_ -> noOp)
+        }
+
+When using `mdgriffith/elm-ui`, you could define something like this:
+
+    elementFunctions : DomFunctions (Attribute msg) (Attribute Never) (Element msg) (Element Never) msg
+    elementFunctions =
+        { div =
+            \attributes children ->
+                Element.el (Element.below children.ul :: attributes) children.button
+        , text = Element.text
+        , button =
+            \attributes children ->
+                Input.button attributes
+                    { onPress = Nothing
+                    , label =
+                        Element.row
+                            [ Element.width Element.fill
+                            , Element.height Element.fill
+                            ]
+                            children
+                    }
+        , ul = Element.column
+        , li = Element.row
+        , on = Element.htmlAttribute (Events.on event decoder)
+        , preventDefaultOn = Element.htmlAttribute (Events.preventDefaultOn event decoder)
+        , attribute = Element.htmlAttribute (Attributes.attribute name value)
+        , style = Element.htmlAttribute (Attributes.style name value)
+        , attributeMap = \noOp -> Element.mapAttribute (\_ -> noOp)
+        , htmlMap = \noOp -> Element.map (\_ -> noOp)
+        }
+
 -}
 type alias DomFunctions attribute attributeNever html htmlNever msg =
     { div :
@@ -461,7 +515,8 @@ type alias DomFunctions attribute attributeNever html htmlNever msg =
     }
 
 
-{-| TODO
+{-| Create a customized view function for the DOM library of your choice by
+providing some `DomFunctions`.
 -}
 customView :
     DomFunctions attribute attributeNever html htmlNever msg
