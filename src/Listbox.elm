@@ -22,8 +22,6 @@ widget](https://www.w3.org/TR/wai-aria-practices-1.1/#Listbox):
 > A listbox widget presents a list of options and allows a user to select one
 > or more of them.
 
-TODO: link to ellie example
-
 Take a look at the documentation of `Behaviour` for the default keyboard
 interactions this widget offers.
 

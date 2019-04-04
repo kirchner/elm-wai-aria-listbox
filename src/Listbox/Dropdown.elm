@@ -11,8 +11,6 @@ module Listbox.Dropdown exposing
 is based on the [Collapsible Dropdown Listbox
 Example](https://www.w3.org/TR/wai-aria-practices-1.1/examples/listbox/listbox-collapsible.html).
 
-TODO: add ellie example
-
 @docs Dropdown, init, view, Instance
 
 @docs update, Msg, subscriptions

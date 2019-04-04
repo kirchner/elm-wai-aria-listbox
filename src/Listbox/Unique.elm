@@ -8,8 +8,6 @@ module Listbox.Unique exposing
 selection. You just have to replace the `view` and the `update` function with
 the ones in this module.
 
-TODO: link to ellie example
-
 @docs view, update
 
 @docs focusEntry, focusNextOrFirstEntry, focusPreviousOrFirstEntry
@@ -79,7 +77,10 @@ htmlFunctions =
     }
 
 
-{-| TODO
+{-| Use this instead of `Listbox.customView` if the user can only select **at
+most one** entry in the listbox. The only difference between the type signature
+of this function and the one of `Listbox.customView` is that the last argument
+is a `Maybe a` instead of a `List a`.
 -}
 customView :
     DomFunctions attribute attributeNever html htmlNever msg
