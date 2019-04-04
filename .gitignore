@@ -3,5 +3,4 @@ node_modules/
 yarn-error.log
 gh-pages/
 result
-docs.json
 elm.js
