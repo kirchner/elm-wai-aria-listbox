@@ -549,6 +549,7 @@ customView dom config instance allEntries (Dropdown data) maybeSelection =
                 , liDivider = views.liDivider
                 , empty = dom.text ""
                 , focusable = True
+                , markActiveDescendant = True
                 }
     in
     dom.div
@@ -614,7 +615,7 @@ customView dom config instance allEntries (Dropdown data) maybeSelection =
                 }
                 listboxConfig
                 { id = printListboxId instance.id
-                , labelledBy = instance.labelledBy
+                , label = Listbox.labelledBy instance.labelledBy
                 , lift = instance.lift << ListboxMsg (Just instance.id)
                 }
                 allEntries
@@ -803,7 +804,7 @@ update (UpdateConfig uniqueId behaviour) allEntries msg dropdown maybeSelection 
                     , Task.attempt (\_ -> NoOp) <|
                         Listbox.focus
                             { id = printListboxId ids.id
-                            , labelledBy = ids.labelledBy
+                            , label = Listbox.labelledBy ids.labelledBy
                             , lift = ListboxMsg (Just ids.id)
                             }
                     , maybeSelection
@@ -815,7 +816,7 @@ update (UpdateConfig uniqueId behaviour) allEntries msg dropdown maybeSelection 
             , Task.attempt (\_ -> NoOp) <|
                 Listbox.focus
                     { id = printListboxId ids.id
-                    , labelledBy = ids.labelledBy
+                    , label = Listbox.labelledBy ids.labelledBy
                     , lift = ListboxMsg (Just ids.id)
                     }
             , maybeSelection
@@ -843,7 +844,7 @@ update (UpdateConfig uniqueId behaviour) allEntries msg dropdown maybeSelection 
             , Task.attempt (\_ -> NoOp) <|
                 Listbox.focus
                     { id = printListboxId ids.id
-                    , labelledBy = ids.labelledBy
+                    , label = Listbox.labelledBy ids.labelledBy
                     , lift = ListboxMsg (Just ids.id)
                     }
             , newSelection
@@ -871,7 +872,7 @@ update (UpdateConfig uniqueId behaviour) allEntries msg dropdown maybeSelection 
             , Task.attempt (\_ -> NoOp) <|
                 Listbox.focus
                     { id = printListboxId ids.id
-                    , labelledBy = ids.labelledBy
+                    , label = Listbox.labelledBy ids.labelledBy
                     , lift = ListboxMsg (Just ids.id)
                     }
             , newSelection

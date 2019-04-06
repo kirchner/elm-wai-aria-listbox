@@ -118,7 +118,10 @@ view model =
                 , Html.div
                     [ Attributes.class "control" ]
                     [ Listbox.view viewConfig
-                        customization
+                        { id = "fruits"
+                        , label = Listbox.labelledBy "fruits-label"
+                        , lift = ListboxMsg
+                        }
                         fruits
                         model.listbox
                         model.selection
@@ -135,13 +138,6 @@ view model =
                 ]
             ]
         ]
-
-
-customization =
-    { id = "fruits"
-    , labelledBy = "fruits-label"
-    , lift = ListboxMsg
-    }
 
 
 
@@ -199,6 +195,7 @@ viewConfig =
         , liDivider = Listbox.noDivider
         , empty = Html.div [] [ Html.text "this list is empty" ]
         , focusable = True
+        , markActiveDescendant = True
         }
 
 

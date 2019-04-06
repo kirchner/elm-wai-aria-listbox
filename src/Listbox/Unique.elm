@@ -52,11 +52,7 @@ a `Maybe a` instead of a `List a`.
 -}
 view :
     ViewConfig a divider
-    ->
-        { id : String
-        , labelledBy : String
-        , lift : Msg a -> msg
-        }
+    -> Listbox.Instance a msg
     -> List (Entry a divider)
     -> Listbox
     -> Maybe a
@@ -85,11 +81,7 @@ is a `Maybe a` instead of a `List a`.
 customView :
     DomFunctions attribute attributeNever html htmlNever msg
     -> CustomViewConfig a divider attributeNever htmlNever
-    ->
-        { id : String
-        , labelledBy : String
-        , lift : Msg a -> msg
-        }
+    -> Listbox.Instance a msg
     -> List (Entry a divider)
     -> Listbox
     -> Maybe a

@@ -1,12 +1,12 @@
 module Listbox exposing
-    ( Listbox, init, view, Instance
+    ( Listbox, init, view, Instance, Label, labelledBy, label, noLabel
     , Entry, option, divider
     , update, Msg, subscriptions
     , UpdateConfig, updateConfig, Behaviour
     , ViewConfig, viewConfig, Views, noDivider
     , HtmlAttributes, HtmlDetails
     , TypeAhead, noTypeAhead, simpleTypeAhead, typeAhead
-    , focusedEntry, hoveredEntry
+    , focusedEntry, focusedEntryId, hoveredEntry
     , focusEntry, focusNextOrFirstEntry, focusPreviousOrFirstEntry
     , focus
     , scrollToFocus
@@ -25,7 +25,7 @@ widget](https://www.w3.org/TR/wai-aria-practices-1.1/#Listbox):
 Take a look at the documentation of `Behaviour` for the default keyboard
 interactions this widget offers.
 
-@docs Listbox, init, view, Instance
+@docs Listbox, init, view, Instance, Label, labelledBy, label, noLabel
 
 @docs Entry, option, divider
 
@@ -57,7 +57,7 @@ interactions this widget offers.
 
 ## State info
 
-@docs focusedEntry, hoveredEntry
+@docs focusedEntry, focusedEntryId, hoveredEntry
 
 
 ## State manipulation
@@ -345,6 +345,7 @@ type alias Views a divider =
     , liDivider : divider -> HtmlDetails
     , empty : Html Never
     , focusable : Bool
+    , markActiveDescendant : Bool
     }
 
 
@@ -502,17 +503,43 @@ information to the `view` function:
 
   - **id**: The unique id of the listbox.
 
-  - **labelledBy**: The unique id of a label element describing the content of
-    the listbox.
+  - **labelledBy**: TODO
 
   - **lift**: Your message type constructor wrapping the listbox `Msg`'s.
 
 -}
 type alias Instance a msg =
     { id : String
-    , labelledBy : String
+    , label : Label
     , lift : Msg a -> msg
     }
+
+
+{-| TODO
+-}
+type alias Label =
+    Internal.Label
+
+
+{-| TODO
+-}
+labelledBy : String -> Label
+labelledBy =
+    Internal.LabelledBy
+
+
+{-| TODO
+-}
+label : String -> Label
+label =
+    Internal.Label
+
+
+{-| TODO
+-}
+noLabel : Label
+noLabel =
+    Internal.NoLabel
 
 
 {-| Take a list of all entries and a list of selected options and display it as
@@ -591,6 +618,18 @@ listbox's focus although the listbox itself is not focused.
 preventDefaultOnKeyDown : Instance a msg -> Decoder ( msg, Bool ) -> Attribute msg
 preventDefaultOnKeyDown =
     Internal.preventDefaultOnKeyDown Events.preventDefaultOn
+
+
+{-| TODO
+-}
+focusedEntryId :
+    ViewConfig a divider
+    -> Instance a msg
+    -> List (Entry a divider)
+    -> Listbox
+    -> Maybe String
+focusedEntryId =
+    Internal.focusedEntryId
 
 
 
@@ -692,6 +731,7 @@ type alias CustomViews a divider attributeNever htmlNever =
             }
     , empty : htmlNever
     , focusable : Bool
+    , markActiveDescendant : Bool
     }
 
 

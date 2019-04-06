@@ -120,7 +120,7 @@ view model =
                     [ Attributes.class "control" ]
                     [ ListboxUnique.view viewConfig
                         { id = "fruits"
-                        , labelledBy = "fruits-label"
+                        , label = Listbox.labelledBy "fruits-label"
                         , lift = ListboxMsg
                         }
                         fruits
@@ -197,6 +197,7 @@ viewConfig =
         , liDivider = Listbox.noDivider
         , empty = Html.div [] [ Html.text "this list is empty" ]
         , focusable = True
+        , markActiveDescendant = True
         }
 
 

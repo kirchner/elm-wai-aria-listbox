@@ -6,6 +6,7 @@ module Internal.Listbox exposing
     , EntryDomData
     , Focus(..)
     , Instance
+    , Label(..)
     , Listbox
     , Msg(..)
     , Query(..)
@@ -19,6 +20,7 @@ module Internal.Listbox exposing
     , focusNextOrFirstEntry
     , focusPreviousOrFirstEntry
     , focusedEntry
+    , focusedEntryId
     , hoveredEntry
     , init
     , preventDefaultOnKeyDown
@@ -53,10 +55,6 @@ type alias Listbox =
     , focus : Focus
     , hover : Maybe String
     , maybeLastSelectedEntry : Maybe String
-
-    -- DOM
-    , ulScrollTop : Float
-    , ulClientHeight : Float
     }
 
 
@@ -100,8 +98,6 @@ init =
     , focus = NoFocus
     , hover = Nothing
     , maybeLastSelectedEntry = Nothing
-    , ulScrollTop = 0
-    , ulClientHeight = 1000
     }
 
 
@@ -280,6 +276,7 @@ type alias Views a divider attributeNever htmlNever =
     , liDivider : divider -> DomDetails attributeNever htmlNever
     , empty : htmlNever
     , focusable : Bool
+    , markActiveDescendant : Bool
     }
 
 
@@ -336,9 +333,15 @@ type TypeAhead a
 
 type alias Instance a msg =
     { id : String
-    , labelledBy : String
+    , label : Label
     , lift : Msg a -> msg
     }
+
+
+type Label
+    = LabelledBy String
+    | Label String
+    | NoLabel
 
 
 view :
@@ -352,7 +355,7 @@ view :
     -> html
 view multiSelectable dom config instance allEntries listbox selection =
     let
-        { id, lift, labelledBy } =
+        { id, lift, label } =
             instance
 
         { uniqueId, views } =
@@ -394,26 +397,57 @@ view multiSelectable dom config instance allEntries listbox selection =
                         instance
                         listbox.query
                         entry
+
+        addAriaLabelledBy attrs =
+            case label of
+                LabelledBy labelledBy ->
+                    dom.attribute "aria-labelledby" labelledBy :: attrs
+
+                Label label_ ->
+                    dom.attribute "aria-label" label_ :: attrs
+
+                NoLabel ->
+                    attrs
+
+        addAriaActivedescendant focus attrs =
+            if views.markActiveDescendant then
+                let
+                    setHelp a =
+                        dom.attribute "aria-activedescendant"
+                            (printEntryId id (uniqueId a))
+                            :: attrs
+                in
+                focus
+                    |> Maybe.andThen (find uniqueId allEntries)
+                    |> Maybe.map setHelp
+                    |> Maybe.withDefault attrs
+
+            else
+                attrs
     in
-    dom.ul
-        ([ dom.attribute "id" (printListId id)
-         , dom.attribute "role" "listbox"
-         , dom.attribute "aria-labelledby" labelledBy
-         , dom.attribute "aria-multiselectable" (stringFromBool multiSelectable)
-         , dom.preventDefaultOn "keydown" <|
-            Decode.andThen
-                (listKeyPress False id >> Decode.map (\msg -> ( lift msg, True )))
-                KeyInfo.decoder
-         , dom.on "mousedown" (Decode.succeed (lift ListMouseDown))
-         , dom.on "mouseup" (Decode.succeed (lift ListMouseUp))
-         , dom.on "focus" (Decode.succeed (lift (ListFocused id)))
-         , dom.on "blur" (Decode.succeed (lift ListBlured))
-         ]
-            |> setAriaActivedescendant dom.attribute id uniqueId (currentFocus listbox.focus) allEntries
-            |> setTabindex dom.attribute views.focusable
-            |> appendAttributes (dom.attributeMap (lift NoOp)) views.ul
-        )
-        (List.map viewEntryHelp allEntries)
+    if List.isEmpty allEntries then
+        dom.htmlMap (lift NoOp) views.empty
+
+    else
+        dom.ul
+            ([ dom.attribute "id" (printListId id)
+             , dom.attribute "role" "listbox"
+             , dom.attribute "aria-multiselectable" (stringFromBool multiSelectable)
+             , dom.preventDefaultOn "keydown" <|
+                Decode.andThen
+                    (listKeyPress False id >> Decode.map (\msg -> ( lift msg, True )))
+                    KeyInfo.decoder
+             , dom.on "mousedown" (Decode.succeed (lift ListMouseDown))
+             , dom.on "mouseup" (Decode.succeed (lift ListMouseUp))
+             , dom.on "focus" (Decode.succeed (lift (ListFocused id)))
+             , dom.on "blur" (Decode.succeed (lift ListBlured))
+             ]
+                |> addAriaLabelledBy
+                |> addAriaActivedescendant (currentFocus listbox.focus)
+                |> setTabindex dom.attribute views.focusable
+                |> appendAttributes (dom.attributeMap (lift NoOp)) views.ul
+            )
+            (List.map viewEntryHelp allEntries)
 
 
 viewEntry :
@@ -606,6 +640,26 @@ preventDefaultOnKeyDown preventDefaultOn { id, lift } keyDownDecoder =
                 (listKeyPress True id >> Decode.map (\msg -> ( lift msg, True )))
                 KeyInfo.decoder
             ]
+
+
+focusedEntryId :
+    ViewConfig a divider attributeNever htmlNever
+    -> Instance a msg
+    -> List (Entry a divider)
+    -> Listbox
+    -> Maybe String
+focusedEntryId { uniqueId } { id } entries { focus } =
+    case focus of
+        NoFocus ->
+            Nothing
+
+        Focus current ->
+            find uniqueId entries current
+                |> Maybe.map (printEntryId id << uniqueId)
+
+        Pending { current } ->
+            find uniqueId entries current
+                |> Maybe.map (printEntryId id << uniqueId)
 
 
 
@@ -1319,13 +1373,23 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
                 hash =
                     uniqueId a
             in
-            { listbox
-                | query = NoQuery
-                , focus = Focus hash
-                , hover = Just hash
-            }
-                |> fromModel
-                |> toggle a
+            if behaviour.selectionFollowsFocus then
+                { listbox
+                    | query = NoQuery
+                    , focus = Focus hash
+                    , hover = Just hash
+                }
+                    |> fromModel
+                    |> select a selection
+
+            else
+                { listbox
+                    | query = NoQuery
+                    , focus = Focus hash
+                    , hover = Just hash
+                }
+                    |> fromModel
+                    |> toggle a
 
 
 focusPendingKeyboardFocus : Listbox -> Listbox
@@ -1450,7 +1514,7 @@ subscriptions listbox =
 
 printListId : String -> String
 printListId id =
-    id ++ "__element-list"
+    id
 
 
 printEntryId : String -> String -> String
