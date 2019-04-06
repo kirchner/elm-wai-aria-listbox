@@ -21,7 +21,7 @@ decoder : Decoder KeyInfo
 decoder =
     Decode.succeed KeyInfo
         |> Decode.required "key" Decode.string
-        |> Decode.optional "altDown" Decode.bool False
+        |> Decode.optional "altKey" Decode.bool False
         |> Decode.optional "ctrlKey" Decode.bool False
         |> Decode.optional "metaKey" Decode.bool False
         |> Decode.optional "shiftKey" Decode.bool False
