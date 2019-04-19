@@ -556,10 +556,6 @@ listboxApp updateConfig =
                     ++ Debug.toString listbox.query
                     ++ ", hover = "
                     ++ Debug.toString listbox.hover
-                , "      , ulScrollTop            = "
-                    ++ Debug.toString listbox.ulScrollTop
-                , "      , ulClientHeight         = "
-                    ++ Debug.toString listbox.ulClientHeight
                 , "      , maybeLastSelectedEntry = "
                     ++ Debug.toString listbox.maybeLastSelectedEntry
                 , "      }"
