@@ -142,7 +142,8 @@ viewConfig =
                 { attributes = []
                 , children =
                     [ maybeSelection
-                        |> Maybe.withDefault "Select a fruit..."
+                        |> Maybe.withDefault
+                            "Select a fruit..."
                         |> Html.text
                     ]
                 }
@@ -151,9 +152,11 @@ viewConfig =
             \{ selected, focused } name ->
                 { attributes =
                     [ if focused then
-                        Attributes.style "background-color" "green"
+                        Attributes.style "background-color"
+                            "green"
                       else
-                        Attributes.style "background-color" "white"
+                        Attributes.style "background-color"
+                            "white"
                     , if selected then
                         Attributes.style "color" "blue"
                       else
