@@ -37,6 +37,7 @@ import Internal.KeyInfo as KeyInfo exposing (KeyInfo)
 import Internal.Label exposing (Label(..))
 import Json.Decode as Decode exposing (Decoder)
 import Json.Decode.Pipeline as Decode
+import Json.Encode as Encode exposing (Value)
 import List.Extra as List
 import Set
 import Task exposing (Task)
@@ -293,6 +294,7 @@ type alias DomDetails attributeNever htmlNever =
 type alias DomFunctions attribute attributeNever html htmlNever msg =
     { ul : List attribute -> List html -> html
     , li : List attribute -> List html -> html
+    , property : String -> Value -> attribute
     , attribute : String -> String -> attribute
     , on : String -> Decoder msg -> attribute
     , preventDefaultOn : String -> Decoder ( msg, Bool ) -> attribute
@@ -424,7 +426,7 @@ view multiSelectable dom config instance allEntries listbox selection =
 
     else
         dom.ul
-            ([ dom.attribute "id" (printListId id)
+            ([ dom.property "id" (Encode.string (printListId id))
              , dom.attribute "role" "listbox"
              , dom.attribute "aria-multiselectable" (stringFromBool multiSelectable)
              , dom.preventDefaultOn "keydown" <|
@@ -497,7 +499,7 @@ viewEntry dom multiSelectable focused hovered selected config instance query ent
                         attrs
             in
             dom.li
-                ([ dom.attribute "id" (printEntryId id hash)
+                ([ dom.property "id" (Encode.string (printEntryId id hash))
                  , dom.attribute "role" "option"
                  , dom.on "mouseenter" (Decode.succeed (lift (EntryMouseEntered hash)))
                  , dom.on "ouseleave" (Decode.succeed (lift EntryMouseLeft))

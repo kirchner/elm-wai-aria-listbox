@@ -86,6 +86,7 @@ import Html.Events as Events
 import Internal.KeyInfo as KeyInfo
 import Internal.Label exposing (Label(..))
 import Json.Decode as Decode exposing (Decoder)
+import Json.Encode as Encode exposing (Value)
 import Listbox exposing (Entry, Listbox)
 
 
@@ -193,8 +194,9 @@ htmlFunctions =
     , ul = Html.ul
     , li = Html.li
     , on = Events.on
-    , stopPropagationOn = Events.stopPropagationOn
+    , onInput = Events.onInput
     , preventDefaultOn = Events.preventDefaultOn
+    , property = Attributes.property
     , attribute = Attributes.attribute
     , style = Attributes.style
     , attributeMap = \noOp -> Attributes.map (\_ -> noOp)
@@ -233,7 +235,7 @@ type Msg a
     = NoOp
     | InputFocused
     | InputBlured
-    | InputAltArrowUpPressed Visibility
+    | InputAltArrowUpPressed Bool
     | InputAltArrowDownPressed
     | InputEscapePressed
     | InputEnterPressed
@@ -312,8 +314,8 @@ update (UpdateConfig cfg) entries msg ((Combobox data) as combobox) value =
                 , value
                 )
 
-        InputAltArrowUpPressed visibility ->
-            if open visibility data entries value then
+        InputAltArrowUpPressed isOpen ->
+            if isOpen then
                 if
                     Listbox.focusedEntry
                         (listboxUpdateConfig cfg.uniqueId cfg.behaviour)
@@ -745,8 +747,9 @@ package:
         , ul = Html.ul
         , li = Html.li
         , on = Events.on
-        , stopPropagationOn = Events.stopPropagationOn
+        , onInput = Events.onInput
         , preventDefaultOn = Events.preventDefaultOn
+        , property = Attributes.property
         , attribute = Attributes.attribute
         , style = Attributes.style
         , attributeMap = \noOp -> Attributes.map (\_ -> noOp)
@@ -763,12 +766,14 @@ When using `mdgriffith/elm-ui`, you could define something like this:
         , ul = Element.column
         , li = Element.row
         , on = Element.htmlAttribute (Events.on event decoder)
-        , stopPropagationOn =
-            \event decoder ->
-                Element.htmlAttribute (Events.stopPropagationOn event decoder)
+        , onInput =
+            \tagger ->
+                Element.htmlAttribute (Events.onInput tagger)
         , preventDefaultOn =
             \event decoder ->
                 Element.htmlAttribute (Events.preventDefaultOn event decoder)
+        , property =
+            \name value -> Element.htmlAttribute (Attributes.property name value)
         , attribute =
             \name value ->
                 Element.htmlAttribute (Attributes.attribute name value)
@@ -787,8 +792,9 @@ type alias DomFunctions attribute attributeNever html htmlNever msg =
     , ul : List attribute -> List html -> html
     , li : List attribute -> List html -> html
     , on : String -> Decoder msg -> attribute
-    , stopPropagationOn : String -> Decoder ( msg, Bool ) -> attribute
+    , onInput : (String -> msg) -> attribute
     , preventDefaultOn : String -> Decoder ( msg, Bool ) -> attribute
+    , property : String -> Value -> attribute
     , attribute : String -> String -> attribute
     , style : String -> String -> attributeNever
     , attributeMap : msg -> attributeNever -> attribute
@@ -938,6 +944,7 @@ customView dom (CustomViewConfig config) instance entries (Combobox data) value 
         listboxDom =
             { ul = dom.ul
             , li = dom.li
+            , property = dom.property
             , attribute = dom.attribute
             , on = dom.on
             , preventDefaultOn = dom.preventDefaultOn
@@ -975,7 +982,7 @@ customView dom (CustomViewConfig config) instance entries (Combobox data) value 
             Attributes.map (\_ -> noOp)
 
         isOpen =
-            customOpen config.visibility data entries value
+            open config.visibility data entries value
 
         popup =
             case config.visibility of
@@ -1058,8 +1065,8 @@ customView dom (CustomViewConfig config) instance entries (Combobox data) value 
             |> appendAttributes (dom.attributeMap (instance.lift NoOp)) config.views.container
         )
         [ dom.input
-            ([ dom.attribute "id" (inputId instance)
-             , dom.attribute "type" "text"
+            ([ dom.property "id" (Encode.string (inputId instance))
+             , dom.property "type" (Encode.string "text")
              , dom.attribute "role" <|
                 case config.role of
                     Textbox ->
@@ -1075,7 +1082,7 @@ customView dom (CustomViewConfig config) instance entries (Combobox data) value 
 
                     CustomSometimes _ ->
                         "list"
-             , dom.attribute "value" value
+             , dom.property "value" (Encode.string value)
              , Listbox.customPreventDefaultOnKeyDown dom.preventDefaultOn
                 listboxInstance
                 (KeyInfo.decoder
@@ -1091,12 +1098,14 @@ customView dom (CustomViewConfig config) instance entries (Combobox data) value 
                                                     || keyInfo.shiftDown
                                                 )
                                     then
-                                        --Decode.succeed
-                                        --    ( instance.lift
-                                        --        (InputAltArrowUpPressed config.visibility)
-                                        --    , True
-                                        --    )
-                                        Decode.fail "TODO"
+                                        -- TODO: this may not work in some
+                                        -- browsers/on some platforms, due to
+                                        -- https://github.com/elm/html/issues/180
+                                        Decode.succeed
+                                            ( instance.lift
+                                                (InputAltArrowUpPressed isOpen)
+                                            , True
+                                            )
 
                                     else
                                         Decode.fail "not handling that key here"
@@ -1149,11 +1158,7 @@ customView dom (CustomViewConfig config) instance entries (Combobox data) value 
                                         )
                         )
                 )
-             , dom.stopPropagationOn "input"
-                (Decode.map
-                    (\newValue -> ( instance.lift (ValueChanged newValue), True ))
-                    (Decode.at [ "target", "value" ] Decode.string)
-                )
+             , dom.onInput (instance.lift << ValueChanged)
              , dom.on "focus" (Decode.succeed (instance.lift InputFocused))
              , dom.on "blur" (Decode.succeed (instance.lift InputBlured))
              ]
@@ -1171,43 +1176,13 @@ customView dom (CustomViewConfig config) instance entries (Combobox data) value 
 ---- HELPER
 
 
-open : Visibility -> ComboboxData a -> List (Entry a divider) -> String -> Bool
-open visibility data entries value =
-    case visibility of
-        Always empty ->
-            data.focused
-                && not data.closeRequested
-
-        Sometimes conditions ->
-            (case conditions.whenMatchingWithMinimalValueLength of
-                Nothing ->
-                    False
-
-                Just minimalLength ->
-                    not (List.isEmpty entries)
-                        && (String.length value >= minimalLength)
-                        && data.focused
-                        && not data.closeRequested
-            )
-                || (case conditions.whenRequested of
-                        Nothing ->
-                            False
-
-                        Just { checkValue, empty } ->
-                            checkValue value
-                                && data.showRequested
-                                && data.focused
-                                && not data.closeRequested
-                   )
-
-
-customOpen :
+open :
     CustomVisibility htmlNever
     -> ComboboxData a
     -> List (Entry a divider)
     -> String
     -> Bool
-customOpen visibility data entries value =
+open visibility data entries value =
     case visibility of
         CustomAlways empty ->
             data.focused

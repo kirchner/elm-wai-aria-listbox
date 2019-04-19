@@ -70,6 +70,7 @@ import Html.Events as Events
 import Internal.KeyInfo as KeyInfo exposing (KeyInfo)
 import Internal.Label exposing (Label(..))
 import Json.Decode as Decode exposing (Decoder)
+import Json.Encode as Encode exposing (Value)
 import Listbox as Listbox
     exposing
         ( Entry
@@ -408,6 +409,7 @@ htmlFunctions =
     , li = Html.li
     , on = Events.on
     , preventDefaultOn = Events.preventDefaultOn
+    , property = Attributes.property
     , attribute = Attributes.attribute
     , style = Attributes.style
     , attributeMap = \noOp -> Attributes.map (\_ -> noOp)
@@ -487,6 +489,7 @@ package:
         , li = Html.li
         , on = Events.on
         , preventDefaultOn = Events.preventDefaultOn
+        , property = Attributes.property
         , attribute = Attributes.attribute
         , style = Attributes.style
         , attributeMap = \noOp -> Attributes.map (\_ -> noOp)
@@ -514,10 +517,16 @@ When using `mdgriffith/elm-ui`, you could define something like this:
                     }
         , ul = Element.column
         , li = Element.row
-        , on = Element.htmlAttribute (Events.on event decoder)
-        , preventDefaultOn = Element.htmlAttribute (Events.preventDefaultOn event decoder)
-        , attribute = Element.htmlAttribute (Attributes.attribute name value)
-        , style = Element.htmlAttribute (Attributes.style name value)
+        , on =
+            \event decoder -> Element.htmlAttribute (Events.on event decoder)
+        , preventDefaultOn =
+            \event decoder -> Element.htmlAttribute (Events.preventDefaultOn event decoder)
+        , property =
+            \name value -> Element.htmlAttribute (Attributes.property name value)
+        , attribute =
+            \name value -> Element.htmlAttribute (Attributes.attribute name value)
+        , style =
+            \name value -> Element.htmlAttribute (Attributes.style name value)
         , attributeMap = \noOp -> Element.mapAttribute (\_ -> noOp)
         , htmlMap = \noOp -> Element.map (\_ -> noOp)
         }
@@ -537,6 +546,7 @@ type alias DomFunctions attribute attributeNever html htmlNever msg =
     , li : List attribute -> List html -> html
     , on : String -> Decoder msg -> attribute
     , preventDefaultOn : String -> Decoder ( msg, Bool ) -> attribute
+    , property : String -> Value -> attribute
     , attribute : String -> String -> attribute
     , style : String -> String -> attributeNever
     , attributeMap : msg -> attributeNever -> attribute
@@ -641,6 +651,7 @@ customView dom config instance allEntries (Dropdown data) maybeSelection =
             Listbox.customViewUnique
                 { ul = dom.ul
                 , li = dom.li
+                , property = dom.property
                 , attribute = dom.attribute
                 , on = dom.on
                 , preventDefaultOn = dom.preventDefaultOn
@@ -689,8 +700,8 @@ viewButton dom instance { attributes, children } selection open =
                     attrs
     in
     dom.button
-        ([ dom.attribute "id" (printButtonId id)
-         , dom.attribute "type" "button"
+        ([ dom.property "id" (Encode.string (printButtonId id))
+         , dom.property "type" (Encode.string "button")
          , dom.attribute "aria-haspopup" "listbox"
          , dom.attribute "tabindex" "0"
          , dom.on "keypress"

@@ -151,6 +151,7 @@ import Internal.Label as Internal
 import Internal.Listbox as Internal
 import Json.Decode as Decode exposing (Decoder)
 import Json.Decode.Pipeline as Decode
+import Json.Encode exposing (Value)
 import List.Extra as List
 import Set
 import Task exposing (Task)
@@ -641,6 +642,7 @@ htmlFunctions =
     , li = Html.li
     , on = Events.on
     , preventDefaultOn = Events.preventDefaultOn
+    , property = Attributes.property
     , attribute = Attributes.attribute
     , attributeMap = \noOp -> Attributes.map (\_ -> noOp)
     , htmlMap = \noOp -> Html.map (\_ -> noOp)
@@ -849,6 +851,7 @@ package:
         , li = Html.li
         , on = Events.on
         , preventDefaultOn = Events.preventDefaultOn
+        , property = Attributes.property
         , attribute = Attributes.attribute
         , attributeMap = \noOp -> Attributes.map (\_ -> noOp)
         , htmlMap = \noOp -> Html.map (\_ -> noOp)
@@ -860,9 +863,14 @@ When using `mdgriffith/elm-ui`, you could define something like this:
     elementFunctions =
         { ul = Element.column
         , li = Element.row
-        , on = Element.htmlAttribute (Events.on event decoder)
-        , preventDefaultOn = Element.htmlAttribute (Events.preventDefaultOn event decoder)
-        , attribute = Element.htmlAttribute (Attributes.attribute name value)
+        , on =
+            \event decoder -> Element.htmlAttribute (Events.on event decoder)
+        , preventDefaultOn =
+            \event decoder -> Element.htmlAttribute (Events.preventDefaultOn event decoder)
+        , property =
+            \name value -> Element.htmlAttribute (Attributes.property name value)
+        , attribute =
+            \name value -> Element.htmlAttribute (Attributes.attribute name value)
         , attributeMap = \noOp -> Element.mapAttribute (\_ -> noOp)
         , htmlMap = \noOp -> Element.map (\_ -> noOp)
         }
@@ -873,6 +881,7 @@ type alias DomFunctions attribute attributeNever html htmlNever msg =
     , li : List attribute -> List html -> html
     , on : String -> Decoder msg -> attribute
     , preventDefaultOn : String -> Decoder ( msg, Bool ) -> attribute
+    , property : String -> Value -> attribute
     , attribute : String -> String -> attribute
     , attributeMap : msg -> attributeNever -> attribute
     , htmlMap : msg -> htmlNever -> html
