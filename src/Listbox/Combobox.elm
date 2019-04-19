@@ -1,5 +1,6 @@
 module Listbox.Combobox exposing
-    ( Combobox, init, view, Instance
+    ( view, Instance
+    , Combobox, init
     , update, Msg, subscriptions
     , UpdateConfig, updateConfig, Behaviour
     , ViewConfig, viewConfig, Role(..), Visibility(..), Views
@@ -13,10 +14,21 @@ widget](https://www.w3.org/TR/wai-aria-practices-1.1/#combobox):
 > 1.  a single-line textbox, and
 > 2.  an associated pop-up element for helping users set the value of the textbox.
 
-In this module the pop-up is a listbox. Take a look at the documentation of `Behaviour` for the default keyboard
-interactions this widget offers.
+In this module the pop-up is a listbox. Take a look at the documentation of
+`Behaviour` for the default keyboard interactions this widget offers.
 
-@docs Combobox, init, view, Instance
+
+# View
+
+@docs view, Instance
+
+
+# State
+
+@docs Combobox, init
+
+
+# Update
 
 @docs update, Msg, subscriptions
 

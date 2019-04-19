@@ -1,5 +1,6 @@
 module Listbox.Dropdown exposing
-    ( Dropdown, init, view, Instance
+    ( view, Instance
+    , Dropdown, init
     , update, Msg, subscriptions
     , UpdateConfig, updateConfig, Behaviour
     , ViewConfig, viewConfig, Views
@@ -11,7 +12,18 @@ module Listbox.Dropdown exposing
 is based on the [Collapsible Dropdown Listbox
 Example](https://www.w3.org/TR/wai-aria-practices-1.1/examples/listbox/listbox-collapsible.html).
 
-@docs Dropdown, init, view, Instance
+
+# View
+
+@docs view, Instance
+
+
+# State
+
+@docs Dropdown, init
+
+
+# Update
 
 @docs update, Msg, subscriptions
 
