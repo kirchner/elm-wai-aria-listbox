@@ -6,6 +6,9 @@ module Listbox exposing
     , ViewConfig, viewConfig, Views, noDivider
     , HtmlAttributes, HtmlDetails
     , TypeAhead, noTypeAhead, simpleTypeAhead, typeAhead
+    , viewUnique, updateUnique
+    , focusEntryUnique, focusNextOrFirstEntryUnique, focusPreviousOrFirstEntryUnique
+    , customViewUnique
     , focusedEntry, focusedEntryId, hoveredEntry
     , focusEntry, focusNextOrFirstEntry, focusPreviousOrFirstEntry
     , focus
@@ -50,6 +53,19 @@ interactions this widget offers.
 ## Type-ahead
 
 @docs TypeAhead, noTypeAhead, simpleTypeAhead, typeAhead
+
+
+# Unique selection
+
+If you need a `Listbox` allowing only **at most one** selection. You just have
+to replace the `view`, `update`, ... functions with the following ones in this
+section.
+
+@docs viewUnique, updateUnique
+
+@docs focusEntryUnique, focusNextOrFirstEntryUnique, focusPreviousOrFirstEntryUnique
+
+@docs customViewUnique
 
 
 # Advanced usage
@@ -177,8 +193,8 @@ focusedEntry :
     -> List (Entry a divider)
     -> Listbox
     -> Maybe a
-focusedEntry =
-    Internal.focusedEntry
+focusedEntry (UpdateConfig config) =
+    Internal.focusedEntry config
 
 
 {-| Returns the option which currently has mouse focus.
@@ -188,8 +204,8 @@ hoveredEntry :
     -> List (Entry a divider)
     -> Listbox
     -> Maybe a
-hoveredEntry =
-    Internal.hoveredEntry
+hoveredEntry (UpdateConfig config) =
+    Internal.hoveredEntry config
 
 
 {-| Sets the keyboard focus to the provided options.
@@ -204,7 +220,7 @@ focusEntry :
     -> Listbox
     -> List a
     -> ( Listbox, List a )
-focusEntry config newEntry listbox selection =
+focusEntry (UpdateConfig config) newEntry listbox selection =
     Internal.focusEntry config newEntry listbox selection
 
 
@@ -221,7 +237,7 @@ focusNextOrFirstEntry :
     -> Listbox
     -> List a
     -> ( Listbox, List a )
-focusNextOrFirstEntry config allEntries listbox selection =
+focusNextOrFirstEntry (UpdateConfig config) allEntries listbox selection =
     Internal.focusNextOrFirstEntry config allEntries listbox selection
 
 
@@ -238,7 +254,7 @@ focusPreviousOrFirstEntry :
     -> Listbox
     -> List a
     -> ( Listbox, List a )
-focusPreviousOrFirstEntry config allEntries listbox selection =
+focusPreviousOrFirstEntry (UpdateConfig config) allEntries listbox selection =
     Internal.focusPreviousOrFirstEntry config allEntries listbox selection
 
 
@@ -255,17 +271,26 @@ scrollToFocus behaviour { id, lift } listbox =
 
 
 {-| -}
-type alias ViewConfig a divider =
-    Internal.ViewConfig a divider (Attribute Never) (Html Never)
+type ViewConfig a divider
+    = ViewConfig (Internal.ViewConfig a divider (Attribute Never) (Html Never))
 
 
-{-| Generate a `ViewConfig` by providing a hash function for the entries and
-a `Views` record, which holds all the styling information. You usually do
-**not** want to store this inside your model.
+{-| Generate a `ViewConfig` by providing the following:
+
+  - **uniqueId**: A hash function for the entries.
+
+  - **views**: View customizations.
+
+You usually do **not** want to store this inside your model.
+
 -}
-viewConfig : (a -> String) -> Views a divider -> ViewConfig a divider
+viewConfig :
+    { uniqueId : a -> String
+    , views : Views a divider
+    }
+    -> ViewConfig a divider
 viewConfig =
-    Internal.ViewConfig
+    ViewConfig
 
 
 {-| **Available view customizations**
@@ -379,16 +404,24 @@ type alias HtmlDetails =
 
 
 {-| -}
-type alias UpdateConfig a =
-    Internal.UpdateConfig a
+type UpdateConfig a
+    = UpdateConfig (Internal.UpdateConfig a)
 
 
-{-| Generate an `UpdateConfig` by providing a hash function for the entries and
-a `Behaviour` record.
+{-| Generate an `UpdateConfig` by providing the following:
+
+  - **uniqueId**: A hash function for the entries.
+
+  - **behaviour**: Behaviour customizations.
+
 -}
-updateConfig : (a -> String) -> Behaviour a -> UpdateConfig a
+updateConfig :
+    { uniqueId : a -> String
+    , behaviour : Behaviour a
+    }
+    -> UpdateConfig a
 updateConfig =
-    Internal.UpdateConfig
+    UpdateConfig
 
 
 {-| **Available behaviour customizations**
@@ -579,7 +612,7 @@ view :
     -> Listbox
     -> List a
     -> Html msg
-view config instance allEntries listbox selection =
+view (ViewConfig config) instance allEntries listbox selection =
     Internal.view True htmlFunctions config instance allEntries listbox selection
 
 
@@ -632,8 +665,140 @@ focusedEntryId :
     -> List (Entry a divider)
     -> Listbox
     -> Maybe String
-focusedEntryId =
-    Internal.focusedEntryId
+focusedEntryId (ViewConfig config) =
+    Internal.focusedEntryId config
+
+
+
+---- UNIQUE SELECTION
+
+
+{-| Use this instead of `view` if the user can only select **at
+most one** entry in the listbox. The only difference between the type signature
+of this function and the one of `view` is that the last argument is a `Maybe a`
+instead of a `List a`.
+-}
+viewUnique :
+    ViewConfig a divider
+    -> Instance a msg
+    -> List (Entry a divider)
+    -> Listbox
+    -> Maybe a
+    -> Html msg
+viewUnique (ViewConfig config) cfg entries listbox selection =
+    Internal.view False htmlFunctions config cfg entries listbox (maybeToList selection)
+
+
+{-| Use this instead of `customView` if the user can only select **at
+most one** entry in the listbox. The only difference between the type signature
+of this function and the one of `customView` is that the last argument is
+a `Maybe a` instead of a `List a`.
+-}
+customViewUnique :
+    DomFunctions attribute attributeNever html htmlNever msg
+    -> CustomViewConfig a divider attributeNever htmlNever
+    -> Instance a msg
+    -> List (Entry a divider)
+    -> Listbox
+    -> Maybe a
+    -> html
+customViewUnique dom config cfg entries listbox selection =
+    Internal.view False dom config cfg entries listbox (maybeToList selection)
+
+
+{-| Use this function instead of `update` if the user can only
+select **at most one** entry in the listbox. The only difference between the
+type signature of this function and the one of `update` is that the last
+argument is a `Maybe a` instead of a `List a`.
+-}
+updateUnique :
+    UpdateConfig a
+    -> List (Entry a divider)
+    -> Msg a
+    -> Listbox
+    -> Maybe a
+    -> ( Listbox, Cmd (Msg a), Maybe a )
+updateUnique config allEntries msg listbox selection =
+    let
+        ( newListbox, cmd, newSelection ) =
+            update config allEntries msg listbox <|
+                maybeToList selection
+    in
+    ( newListbox, cmd, listToMaybe newSelection )
+
+
+{-| Sets the keyboard focus to the provided options.
+
+**Note**: This will not adjust the scroll position of the listbox, so you might
+want to apply `scrollToFocus` afterwards.
+
+-}
+focusEntryUnique : UpdateConfig a -> a -> Listbox -> Maybe a -> ( Listbox, Maybe a )
+focusEntryUnique config newEntry listbox selection =
+    withUnique selection (focusEntry config newEntry listbox)
+
+
+{-| Sets the keyboard focus to the next option. If `jumpAtEnds` is true and the
+focus is already on the last option, the first option is selected.
+
+**Note**: This will not adjust the scroll position of the listbox, so you might
+want to apply `scrollToFocus` afterwards.
+
+-}
+focusNextOrFirstEntryUnique :
+    UpdateConfig a
+    -> List (Entry a divider)
+    -> Listbox
+    -> Maybe a
+    -> ( Listbox, Maybe a )
+focusNextOrFirstEntryUnique config allEntries listbox selection =
+    withUnique selection (focusNextOrFirstEntry config allEntries listbox)
+
+
+{-| Sets the keyboard focus to the previous option. If `jumpAtEnds` is true and the
+focus is already on the first option, the first option is selected.
+
+**Note**: This will not adjust the scroll position of the listbox, so you might
+want to apply `scrollToFocus` afterwards.
+
+-}
+focusPreviousOrFirstEntryUnique :
+    UpdateConfig a
+    -> List (Entry a divider)
+    -> Listbox
+    -> Maybe a
+    -> ( Listbox, Maybe a )
+focusPreviousOrFirstEntryUnique config allEntries listbox selection =
+    withUnique selection (focusPreviousOrFirstEntry config allEntries listbox)
+
+
+withUnique : Maybe a -> (List a -> ( Listbox, List a )) -> ( Listbox, Maybe a )
+withUnique selection func =
+    let
+        ( listbox, list ) =
+            func (maybeToList selection)
+    in
+    ( listbox, listToMaybe list )
+
+
+maybeToList : Maybe a -> List a
+maybeToList maybeA =
+    case maybeA of
+        Nothing ->
+            []
+
+        Just a ->
+            [ a ]
+
+
+listToMaybe : List a -> Maybe a
+listToMaybe listA =
+    case listA of
+        [] ->
+            Nothing
+
+        a :: _ ->
+            Just a
 
 
 
@@ -795,7 +960,7 @@ update :
     -> Listbox
     -> List a
     -> ( Listbox, Cmd (Msg a), List a )
-update config entries msg listbox selection =
+update (UpdateConfig config) entries msg listbox selection =
     let
         ( newListbox, effect, newSelection ) =
             Internal.update config entries msg listbox selection

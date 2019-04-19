@@ -65,7 +65,6 @@ import Listbox as Listbox
         , Listbox
         , TypeAhead
         )
-import Listbox.Unique as ListboxUnique
 import Task
 
 
@@ -103,14 +102,26 @@ init =
 
 {-| -}
 type ViewConfig a divider
-    = ViewConfig (a -> String) (Views a divider)
+    = ViewConfig
+        { uniqueId : a -> String
+        , views : Views a divider
+        }
 
 
-{-| Generate a `ViewConfig` by providing a hash function for the entries and
-a `Views` record, which holds all the styling information. You usually do
-**not** want to store this inside your model.
+{-| Generate a `ViewConfig` by providing the following:
+
+  - **uniqueId**: A hash function for the entries.
+
+  - **views**: View customizations.
+
+You usually do **not** want to store this inside your model.
+
 -}
-viewConfig : (a -> String) -> Views a divider -> ViewConfig a divider
+viewConfig :
+    { uniqueId : a -> String
+    , views : Views a divider
+    }
+    -> ViewConfig a divider
 viewConfig =
     ViewConfig
 
@@ -224,13 +235,20 @@ type alias Views a divider =
 
 {-| -}
 type UpdateConfig a
-    = UpdateConfig (a -> String) (Behaviour a)
+    = UpdateConfig
+        { uniqueId : a -> String
+        , behaviour : Behaviour a
+        }
 
 
 {-| Generate an `UpdateConfig` by providing a hash function for the entries and
 a `Behaviour` record.
 -}
-updateConfig : (a -> String) -> Behaviour a -> UpdateConfig a
+updateConfig :
+    { uniqueId : a -> String
+    , behaviour : Behaviour a
+    }
+    -> UpdateConfig a
 updateConfig =
     UpdateConfig
 
@@ -351,7 +369,7 @@ view :
     -> Dropdown
     -> Maybe a
     -> Html msg
-view (ViewConfig uniqueId views) =
+view (ViewConfig { uniqueId, views }) =
     customView htmlFunctions
         (CustomViewConfig uniqueId
             { container = views.container
@@ -604,7 +622,7 @@ customView dom config instance allEntries (Dropdown data) maybeSelection =
         )
         { button = viewButton dom instance buttonHtmlDetails maybeSelection True
         , ul =
-            ListboxUnique.customView
+            Listbox.customViewUnique
                 { ul = dom.ul
                 , li = dom.li
                 , attribute = dom.attribute
@@ -774,20 +792,23 @@ update :
     -> Dropdown
     -> Maybe a
     -> ( Dropdown, Cmd (Msg a), Maybe a )
-update (UpdateConfig uniqueId behaviour) allEntries msg dropdown maybeSelection =
+update (UpdateConfig { uniqueId, behaviour }) allEntries msg dropdown maybeSelection =
     let
         (Dropdown data) =
             dropdown
 
         listboxConfig =
-            Listbox.updateConfig uniqueId
-                { jumpAtEnds = behaviour.jumpAtEnds
-                , separateFocus = behaviour.separateFocus
-                , selectionFollowsFocus = behaviour.selectionFollowsFocus
-                , handleHomeAndEnd = behaviour.handleHomeAndEnd
-                , typeAhead = behaviour.typeAhead
-                , minimalGap = behaviour.minimalGap
-                , initialGap = behaviour.initialGap
+            Listbox.updateConfig
+                { uniqueId = uniqueId
+                , behaviour =
+                    { jumpAtEnds = behaviour.jumpAtEnds
+                    , separateFocus = behaviour.separateFocus
+                    , selectionFollowsFocus = behaviour.selectionFollowsFocus
+                    , handleHomeAndEnd = behaviour.handleHomeAndEnd
+                    , typeAhead = behaviour.typeAhead
+                    , minimalGap = behaviour.minimalGap
+                    , initialGap = behaviour.initialGap
+                    }
                 }
     in
     case msg of
@@ -825,7 +846,7 @@ update (UpdateConfig uniqueId behaviour) allEntries msg dropdown maybeSelection 
         ButtonArrowUpPressed ids ->
             let
                 ( newListbox, newSelection ) =
-                    ListboxUnique.focusPreviousOrFirstEntry listboxConfig
+                    Listbox.focusPreviousOrFirstEntryUnique listboxConfig
                         allEntries
                         data.listbox
                         maybeSelection
@@ -853,7 +874,7 @@ update (UpdateConfig uniqueId behaviour) allEntries msg dropdown maybeSelection 
         ButtonArrowDownPressed ids ->
             let
                 ( newListbox, newSelection ) =
-                    ListboxUnique.focusNextOrFirstEntry listboxConfig
+                    Listbox.focusNextOrFirstEntryUnique listboxConfig
                         allEntries
                         data.listbox
                         maybeSelection
@@ -881,7 +902,7 @@ update (UpdateConfig uniqueId behaviour) allEntries msg dropdown maybeSelection 
         ListboxMsg maybeId listboxMsg ->
             let
                 ( newListbox, listboxCmd, newSelection ) =
-                    ListboxUnique.update listboxConfig
+                    Listbox.updateUnique listboxConfig
                         allEntries
                         listboxMsg
                         data.listbox

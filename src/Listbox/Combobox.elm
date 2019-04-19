@@ -59,7 +59,6 @@ import Html.Events as Events
 import Internal.KeyInfo as KeyInfo
 import Json.Decode as Decode
 import Listbox exposing (Entry, Listbox)
-import Listbox.Unique
 
 
 {-| Tracks the keyboard and mouse focus in the pop-up. The value of the textbox
@@ -220,20 +219,23 @@ view (ViewConfig config) instance entries (Combobox data) value =
                     Attributes.attribute "aria-activedescendant" id :: attrs
 
         listboxViewConfig =
-            Listbox.viewConfig config.uniqueId
-                { ul =
-                    if isOpen then
-                        Attributes.style "position" "absolute" :: config.views.ul
+            Listbox.viewConfig
+                { uniqueId = config.uniqueId
+                , views =
+                    { ul =
+                        if isOpen then
+                            Attributes.style "position" "absolute" :: config.views.ul
 
-                    else
-                        Attributes.style "display" "none"
-                            :: Attributes.style "position" "absolute"
-                            :: config.views.ul
-                , liOption = config.views.liOption
-                , liDivider = config.views.liDivider
-                , empty = Html.text ""
-                , focusable = False
-                , markActiveDescendant = False
+                        else
+                            Attributes.style "display" "none"
+                                :: Attributes.style "position" "absolute"
+                                :: config.views.ul
+                    , liOption = config.views.liOption
+                    , liDivider = config.views.liDivider
+                    , empty = Html.text ""
+                    , focusable = False
+                    , markActiveDescendant = False
+                    }
                 }
 
         listboxInstance =
@@ -297,7 +299,7 @@ view (ViewConfig config) instance entries (Combobox data) value =
                                     Html.text ""
 
         listbox =
-            Listbox.Unique.view listboxViewConfig
+            Listbox.viewUnique listboxViewConfig
                 listboxInstance
                 entries
                 data.listbox
@@ -627,7 +629,7 @@ update (UpdateConfig cfg) entries msg ((Combobox data) as combobox) value =
         ListboxMsg listboxMsg ->
             let
                 ( newListbox, listboxCmd, newSelection ) =
-                    Listbox.Unique.update (listboxUpdateConfig cfg.uniqueId cfg.behaviour)
+                    Listbox.updateUnique (listboxUpdateConfig cfg.uniqueId cfg.behaviour)
                         entries
                         listboxMsg
                         data.listbox
@@ -674,14 +676,17 @@ update (UpdateConfig cfg) entries msg ((Combobox data) as combobox) value =
 
 listboxUpdateConfig : (a -> String) -> Behaviour a -> Listbox.UpdateConfig a
 listboxUpdateConfig uniqueId behaviour =
-    Listbox.updateConfig uniqueId
-        { jumpAtEnds = False
-        , separateFocus = behaviour.separateFocus
-        , selectionFollowsFocus = True
-        , handleHomeAndEnd = behaviour.handleHomeAndEnd
-        , typeAhead = Listbox.noTypeAhead
-        , minimalGap = behaviour.minimalGap
-        , initialGap = behaviour.initialGap
+    Listbox.updateConfig
+        { uniqueId = uniqueId
+        , behaviour =
+            { jumpAtEnds = False
+            , separateFocus = behaviour.separateFocus
+            , selectionFollowsFocus = True
+            , handleHomeAndEnd = behaviour.handleHomeAndEnd
+            , typeAhead = Listbox.noTypeAhead
+            , minimalGap = behaviour.minimalGap
+            , initialGap = behaviour.initialGap
+            }
         }
 
 

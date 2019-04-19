@@ -30,7 +30,6 @@ import Listbox as Listbox
         , HtmlDetails
         , Listbox
         )
-import Listbox.Unique as ListboxUnique
 
 
 main : Program {} Model Msg
@@ -80,7 +79,7 @@ update msg model =
         ListboxMsg listboxMsg ->
             let
                 ( newListbox, listboxCmd, newSelection ) =
-                    ListboxUnique.update updateConfig
+                    Listbox.updateUnique updateConfig
                         fruits
                         listboxMsg
                         model.listbox
@@ -118,7 +117,7 @@ view model =
                     [ Html.text "Fruits" ]
                 , Html.div
                     [ Attributes.class "control" ]
-                    [ ListboxUnique.view viewConfig
+                    [ Listbox.viewUnique viewConfig
                         { id = "fruits"
                         , label = Listbox.labelledBy "fruits-label"
                         , lift = ListboxMsg
@@ -148,56 +147,62 @@ view model =
 
 updateConfig : Listbox.UpdateConfig String
 updateConfig =
-    Listbox.updateConfig identity
-        { jumpAtEnds = True
-        , separateFocus = True
-        , selectionFollowsFocus = False
-        , handleHomeAndEnd = True
-        , typeAhead = Listbox.simpleTypeAhead 200 identity
-        , minimalGap = 30
-        , initialGap = 100
+    Listbox.updateConfig
+        { uniqueId = identity
+        , behaviour =
+            { jumpAtEnds = True
+            , separateFocus = True
+            , selectionFollowsFocus = False
+            , handleHomeAndEnd = True
+            , typeAhead = Listbox.simpleTypeAhead 200 identity
+            , minimalGap = 30
+            , initialGap = 100
+            }
         }
 
 
 viewConfig : Listbox.ViewConfig String Never
 viewConfig =
-    Listbox.viewConfig identity
-        { ul = [ Attributes.class "list" ]
-        , liOption =
-            \{ selected, focused, hovered, maybeQuery } name ->
-                { attributes =
-                    [ Attributes.class "entry"
-                    , Attributes.classList
-                        [ ( "entry--keyboard-focused", focused )
-                        , ( "entry--mouse-focused", hovered )
+    Listbox.viewConfig
+        { uniqueId = identity
+        , views =
+            { ul = [ Attributes.class "list" ]
+            , liOption =
+                \{ selected, focused, hovered, maybeQuery } name ->
+                    { attributes =
+                        [ Attributes.class "entry"
+                        , Attributes.classList
+                            [ ( "entry--keyboard-focused", focused )
+                            , ( "entry--mouse-focused", hovered )
+                            ]
                         ]
-                    ]
-                , children =
-                    Html.span
-                        [ Attributes.class "icon"
-                        , Attributes.class "is-small"
-                        , Attributes.style "margin-right" "8px"
-                        , Attributes.style "margin-left" "8px"
-                        , Attributes.style "font-size" "12px"
-                        , Attributes.style "width" "16px"
-                        , Widget.hidden True
-                        ]
-                        [ if selected then
-                            Html.i
-                                [ Attributes.class "fas"
-                                , Attributes.class "fa-check"
-                                ]
-                                []
+                    , children =
+                        Html.span
+                            [ Attributes.class "icon"
+                            , Attributes.class "is-small"
+                            , Attributes.style "margin-right" "8px"
+                            , Attributes.style "margin-left" "8px"
+                            , Attributes.style "font-size" "12px"
+                            , Attributes.style "width" "16px"
+                            , Widget.hidden True
+                            ]
+                            [ if selected then
+                                Html.i
+                                    [ Attributes.class "fas"
+                                    , Attributes.class "fa-check"
+                                    ]
+                                    []
 
-                          else
-                            Html.text ""
-                        ]
-                        :: liChildren maybeQuery name
-                }
-        , liDivider = Listbox.noDivider
-        , empty = Html.div [] [ Html.text "this list is empty" ]
-        , focusable = True
-        , markActiveDescendant = True
+                              else
+                                Html.text ""
+                            ]
+                            :: liChildren maybeQuery name
+                    }
+            , liDivider = Listbox.noDivider
+            , empty = Html.div [] [ Html.text "this list is empty" ]
+            , focusable = True
+            , markActiveDescendant = True
+            }
         }
 
 

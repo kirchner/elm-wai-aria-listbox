@@ -143,69 +143,75 @@ view model =
 
 updateConfig : Dropdown.UpdateConfig String
 updateConfig =
-    Dropdown.updateConfig identity
-        { jumpAtEnds = True
-        , closeAfterMouseSelection = False
-        , separateFocus = True
-        , selectionFollowsFocus = False
-        , handleHomeAndEnd = True
-        , typeAhead = Listbox.simpleTypeAhead 200 identity
-        , minimalGap = 0
-        , initialGap = 0
+    Dropdown.updateConfig
+        { uniqueId = identity
+        , behaviour =
+            { jumpAtEnds = True
+            , closeAfterMouseSelection = False
+            , separateFocus = True
+            , selectionFollowsFocus = False
+            , handleHomeAndEnd = True
+            , typeAhead = Listbox.simpleTypeAhead 200 identity
+            , minimalGap = 0
+            , initialGap = 0
+            }
         }
 
 
 viewConfig : Dropdown.ViewConfig String Never
 viewConfig =
-    Dropdown.viewConfig identity
-        { container = []
-        , button =
-            \{ maybeSelection, open } ->
-                { attributes = [ Attributes.class "button" ]
-                , children =
-                    [ Html.span
-                        [ Attributes.style "width" "100%"
-                        , Attributes.style "text-align" "left"
+    Dropdown.viewConfig
+        { uniqueId = identity
+        , views =
+            { container = []
+            , button =
+                \{ maybeSelection, open } ->
+                    { attributes = [ Attributes.class "button" ]
+                    , children =
+                        [ Html.span
+                            [ Attributes.style "width" "100%"
+                            , Attributes.style "text-align" "left"
+                            ]
+                            [ maybeSelection
+                                |> Maybe.withDefault "Select a locale..."
+                                |> Html.text
+                            ]
                         ]
-                        [ maybeSelection
-                            |> Maybe.withDefault "Select a locale..."
-                            |> Html.text
+                    }
+            , ul = [ Attributes.class "dropdown-list" ]
+            , liOption =
+                \{ selected, focused, hovered, maybeQuery } name ->
+                    { attributes =
+                        [ Attributes.class "entry"
+                        , Attributes.classList
+                            [ ( "entry--keyboard-focused", focused )
+                            , ( "entry--mouse-focused", hovered )
+                            ]
                         ]
-                    ]
-                }
-        , ul = [ Attributes.class "dropdown-list" ]
-        , liOption =
-            \{ selected, focused, hovered, maybeQuery } name ->
-                { attributes =
-                    [ Attributes.class "entry"
-                    , Attributes.classList
-                        [ ( "entry--keyboard-focused", focused )
-                        , ( "entry--mouse-focused", hovered )
-                        ]
-                    ]
-                , children =
-                    Html.span
-                        [ Attributes.class "icon"
-                        , Attributes.class "is-small"
-                        , Attributes.style "margin-right" "8px"
-                        , Attributes.style "margin-left" "8px"
-                        , Attributes.style "font-size" "12px"
-                        , Attributes.style "width" "16px"
-                        , Widget.hidden True
-                        ]
-                        [ if selected then
-                            Html.i
-                                [ Attributes.class "fas"
-                                , Attributes.class "fa-check"
-                                ]
-                                []
+                    , children =
+                        Html.span
+                            [ Attributes.class "icon"
+                            , Attributes.class "is-small"
+                            , Attributes.style "margin-right" "8px"
+                            , Attributes.style "margin-left" "8px"
+                            , Attributes.style "font-size" "12px"
+                            , Attributes.style "width" "16px"
+                            , Widget.hidden True
+                            ]
+                            [ if selected then
+                                Html.i
+                                    [ Attributes.class "fas"
+                                    , Attributes.class "fa-check"
+                                    ]
+                                    []
 
-                          else
-                            Html.text ""
-                        ]
-                        :: liChildren maybeQuery name
-                }
-        , liDivider = Listbox.noDivider
+                              else
+                                Html.text ""
+                            ]
+                            :: liChildren maybeQuery name
+                    }
+            , liDivider = Listbox.noDivider
+            }
         }
 
 
