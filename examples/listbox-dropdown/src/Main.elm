@@ -115,7 +115,7 @@ view model =
                     [ Attributes.class "control" ]
                     [ Dropdown.view viewConfig
                         { id = "fruits"
-                        , labelledBy = "fruits-label"
+                        , label = Listbox.labelledBy "fruits-label"
                         , lift = DropdownMsg
                         }
                         fruits
