@@ -17,6 +17,7 @@ module Listbox exposing
     , customView, customViewUnique
     , DomFunctions
     , CustomViewConfig, customViewConfig, CustomViews
+    , customFocusedEntryId
     , customPreventDefaultOnKeyDown
     )
 
@@ -113,6 +114,8 @@ example `rtfeldman/elm-css` or `mdgriffith/elm-ui`.
 @docs DomFunctions
 
 @docs CustomViewConfig, customViewConfig, CustomViews
+
+@docs customFocusedEntryId
 
 @docs customPreventDefaultOnKeyDown
 
@@ -718,7 +721,7 @@ customViewUnique :
     -> Listbox
     -> Maybe a
     -> html
-customViewUnique dom config cfg entries listbox selection =
+customViewUnique dom (CustomViewConfig config) cfg entries listbox selection =
     Internal.view False dom config cfg entries listbox (maybeToList selection)
 
 
@@ -832,8 +835,8 @@ customView :
     -> Listbox
     -> List a
     -> html
-customView =
-    Internal.view True
+customView dom (CustomViewConfig config) =
+    Internal.view True dom config
 
 
 {-| This record holds all the DOM functions needed to render a listbox. It is
@@ -877,19 +880,20 @@ type alias DomFunctions attribute attributeNever html htmlNever msg =
 
 
 {-| -}
-type alias CustomViewConfig a divider attributeNever htmlNever =
-    Internal.ViewConfig a divider attributeNever htmlNever
+type CustomViewConfig a divider attributeNever htmlNever
+    = CustomViewConfig (Internal.ViewConfig a divider attributeNever htmlNever)
 
 
 {-| A replacement for `viewConfig` when you are using your own `customView`
 function.
 -}
 customViewConfig :
-    (a -> String)
-    -> CustomViews a divider attributeNever htmlNever
+    { uniqueId : a -> String
+    , views : CustomViews a divider attributeNever htmlNever
+    }
     -> CustomViewConfig a divider attributeNever htmlNever
 customViewConfig =
-    Internal.ViewConfig
+    CustomViewConfig
 
 
 {-| A replacement for `Views` when you are using your own `customView`
@@ -918,6 +922,19 @@ type alias CustomViews a divider attributeNever htmlNever =
     , focusable : Bool
     , markActiveDescendant : Bool
     }
+
+
+{-| A replacement for `focusedEntryId` when you are using your own `customView`
+function. Take a look at its documentation for a description of each field.
+-}
+customFocusedEntryId :
+    CustomViewConfig a divider htmlNever attributeNever
+    -> Instance a msg
+    -> List (Entry a divider)
+    -> Listbox
+    -> Maybe String
+customFocusedEntryId (CustomViewConfig config) =
+    Internal.focusedEntryId config
 
 
 {-| A replacement for `preventDefaultOn` when you are using your own

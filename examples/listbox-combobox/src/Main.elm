@@ -126,7 +126,7 @@ view model =
                     [ Attributes.class "control" ]
                     [ Combobox.view viewConfig
                         { id = "fruits"
-                        , label = Combobox.labelledBy "fruits-label"
+                        , label = Listbox.labelledBy "fruits-label"
                         , lift = ComboboxMsg
                         }
                         matchingFruits

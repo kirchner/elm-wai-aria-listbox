@@ -4,6 +4,9 @@ module Listbox.Combobox exposing
     , update, Msg, subscriptions
     , UpdateConfig, updateConfig, Behaviour
     , ViewConfig, viewConfig, Role(..), Visibility(..), Views
+    , customView
+    , DomFunctions
+    , CustomViewConfig, customViewConfig, CustomVisibility(..), CustomViews
     )
 
 {-| Implementation of the [combobox
@@ -45,6 +48,18 @@ In this module the pop-up is a listbox. Take a look at the documentation of
 
 @docs ViewConfig, viewConfig, Role, Visibility, Views
 
+
+## Using different DOM libraries
+
+You can use these functions if you want to use other DOM libraries, like for
+example `rtfeldman/elm-css` or `mdgriffith/elm-ui`.
+
+@docs customView
+
+@docs DomFunctions
+
+@docs CustomViewConfig, customViewConfig, CustomVisibility, CustomViews
+
 -}
 
 {-
@@ -70,7 +85,7 @@ import Html.Attributes as Attributes
 import Html.Events as Events
 import Internal.KeyInfo as KeyInfo
 import Internal.Label exposing (Label(..))
-import Json.Decode as Decode
+import Json.Decode as Decode exposing (Decoder)
 import Listbox exposing (Entry, Listbox)
 
 
@@ -166,252 +181,25 @@ view :
     -> Combobox a
     -> String
     -> Html msg
-view (ViewConfig config) instance entries (Combobox data) value =
-    let
-        addAriaControls attrs =
-            if isOpen then
-                Attributes.attribute "aria-controls" (listboxId instance) :: attrs
+view config =
+    customView htmlFunctions (viewConfigToCustom config)
 
-            else
-                attrs
 
-        addAriaLabelledBy attrs =
-            case instance.label of
-                LabelledBy id ->
-                    Attributes.attribute "aria-labelledby" id :: attrs
-
-                Label id ->
-                    Attributes.attribute "aria-label" id :: attrs
-
-                NoLabel ->
-                    attrs
-
-        addAriaActivedescendant attrs =
-            case
-                Listbox.focusedEntryId listboxViewConfig
-                    listboxInstance
-                    entries
-                    data.listbox
-            of
-                Nothing ->
-                    attrs
-
-                Just id ->
-                    Attributes.attribute "aria-activedescendant" id :: attrs
-
-        listboxViewConfig =
-            Listbox.viewConfig
-                { uniqueId = config.uniqueId
-                , views =
-                    { ul =
-                        if isOpen then
-                            Attributes.style "position" "absolute" :: config.views.ul
-
-                        else
-                            Attributes.style "display" "none"
-                                :: Attributes.style "position" "absolute"
-                                :: config.views.ul
-                    , liOption = config.views.liOption
-                    , liDivider = config.views.liDivider
-                    , empty = Html.text ""
-                    , focusable = False
-                    , markActiveDescendant = False
-                    }
-                }
-
-        listboxInstance =
-            { id = listboxId instance
-            , label = Listbox.noLabel
-            , lift = ListboxMsg >> instance.lift
-            }
-
-        attributeMap noOp =
-            Attributes.map (\_ -> noOp)
-
-        isOpen =
-            open config.visibility data entries value
-
-        popup =
-            case config.visibility of
-                Always empty ->
-                    if data.focused && not data.closeRequested then
-                        if List.isEmpty entries then
-                            Html.map (\_ -> instance.lift NoOp) empty
-
-                        else
-                            listbox
-
-                    else
-                        Html.text ""
-
-                Sometimes conditions ->
-                    if
-                        case conditions.whenMatchingWithMinimalValueLength of
-                            Nothing ->
-                                False
-
-                            Just minimalLength ->
-                                not (List.isEmpty entries)
-                                    && (String.length value >= minimalLength)
-                                    && data.focused
-                                    && not data.closeRequested
-                    then
-                        listbox
-
-                    else
-                        case conditions.whenRequested of
-                            Nothing ->
-                                Html.text ""
-
-                            Just { checkValue, empty } ->
-                                if
-                                    checkValue value
-                                        && data.showRequested
-                                        && data.focused
-                                        && not data.closeRequested
-                                then
-                                    if List.isEmpty entries then
-                                        Html.map (\_ -> instance.lift NoOp) empty
-
-                                    else
-                                        listbox
-
-                                else
-                                    Html.text ""
-
-        listbox =
-            Listbox.viewUnique listboxViewConfig
-                listboxInstance
-                entries
-                data.listbox
-                data.selection
-    in
-    Html.div
-        ([ Attributes.attribute "role" "combobox"
-         , Attributes.attribute "aria-expanded" <|
-            if isOpen then
-                "true"
-
-            else
-                "false"
-         , Events.onMouseDown (instance.lift ListboxMousePressed)
-         , Events.onMouseUp (instance.lift ListboxMouseReleased)
-         , Events.on "click"
-            (Decode.at [ "target", "id" ] Decode.string
-                |> Decode.andThen
-                    (\targetId ->
-                        if targetId == inputId instance then
-                            Decode.fail "not handling that click here"
-
-                        else
-                            Decode.succeed (instance.lift ListboxMouseClicked)
-                    )
-            )
-         ]
-            |> appendAttributes (attributeMap (instance.lift NoOp)) config.views.container
-        )
-        [ Html.input
-            ([ Attributes.id (inputId instance)
-             , Attributes.type_ "text"
-             , Attributes.attribute "role" <|
-                case config.role of
-                    Textbox ->
-                        "textbox"
-
-                    Searchbox ->
-                        "searchbox"
-             , Attributes.attribute "aria-multiline" "false"
-             , Attributes.attribute "aria-autocomplete" <|
-                case config.visibility of
-                    Always _ ->
-                        "none"
-
-                    Sometimes _ ->
-                        "list"
-             , Attributes.value value
-             , Listbox.preventDefaultOnKeyDown listboxInstance
-                (KeyInfo.decoder
-                    |> Decode.andThen
-                        (\keyInfo ->
-                            case keyInfo.code of
-                                "ArrowUp" ->
-                                    if
-                                        keyInfo.altDown
-                                            && not
-                                                (keyInfo.controlDown
-                                                    || keyInfo.metaDown
-                                                    || keyInfo.shiftDown
-                                                )
-                                    then
-                                        Decode.succeed
-                                            ( instance.lift
-                                                (InputAltArrowUpPressed config.visibility)
-                                            , True
-                                            )
-
-                                    else
-                                        Decode.fail "not handling that key here"
-
-                                "ArrowDown" ->
-                                    if
-                                        keyInfo.altDown
-                                            && not
-                                                (keyInfo.controlDown
-                                                    || keyInfo.metaDown
-                                                    || keyInfo.shiftDown
-                                                )
-                                    then
-                                        Decode.succeed
-                                            ( instance.lift InputAltArrowDownPressed
-                                            , True
-                                            )
-
-                                    else
-                                        Decode.fail "not handling that key here"
-
-                                "Escape" ->
-                                    Decode.succeed
-                                        ( instance.lift InputEscapePressed
-                                        , True
-                                        )
-
-                                "Enter" ->
-                                    Decode.succeed
-                                        ( instance.lift InputEnterPressed
-                                        , True
-                                        )
-
-                                "Alt" ->
-                                    Decode.fail "not handling that key here"
-
-                                "Control" ->
-                                    Decode.fail "not handling that key here"
-
-                                "Meta" ->
-                                    Decode.fail "not handling that key here"
-
-                                "Shift" ->
-                                    Decode.fail "not handling that key here"
-
-                                _ ->
-                                    Decode.succeed
-                                        ( instance.lift InputOtherKeyPressed
-                                        , False
-                                        )
-                        )
-                )
-             , Events.onInput (instance.lift << ValueChanged)
-             , Events.onFocus (instance.lift InputFocused)
-             , Events.onBlur (instance.lift InputBlured)
-             ]
-                |> addAriaControls
-                |> addAriaLabelledBy
-                |> addAriaActivedescendant
-                |> appendAttributes (attributeMap (instance.lift NoOp)) config.views.input
-            )
-            []
-        , popup
-        ]
+htmlFunctions : DomFunctions (Attribute msg) (Attribute Never) (Html msg) (Html Never) msg
+htmlFunctions =
+    { div = Html.div
+    , text = Html.text
+    , input = Html.input
+    , ul = Html.ul
+    , li = Html.li
+    , on = Events.on
+    , stopPropagationOn = Events.stopPropagationOn
+    , preventDefaultOn = Events.preventDefaultOn
+    , attribute = Attributes.attribute
+    , style = Attributes.style
+    , attributeMap = \noOp -> Attributes.map (\_ -> noOp)
+    , htmlMap = \noOp -> Html.map (\_ -> noOp)
+    }
 
 
 listboxId : Instance a msg -> String
@@ -942,6 +730,444 @@ type alias Behaviour a =
 
 
 
+---- CUSTOM DOM
+
+
+{-| This record holds all the DOM functions needed to render a listbox. It is
+probably instructive to look at the version for the standard `elm/html`
+package:
+
+    htmlFunctions : DomFunctions (Attribute msg) (Attribute Never) (Html msg) (Html Never) msg
+    htmlFunctions =
+        { div = Html.div
+        , text = Html.text
+        , input = Html.input
+        , ul = Html.ul
+        , li = Html.li
+        , on = Events.on
+        , stopPropagationOn = Events.stopPropagationOn
+        , preventDefaultOn = Events.preventDefaultOn
+        , attribute = Attributes.attribute
+        , style = Attributes.style
+        , attributeMap = \noOp -> Attributes.map (\_ -> noOp)
+        , htmlMap = \noOp -> Html.map (\_ -> noOp)
+        }
+
+When using `mdgriffith/elm-ui`, you could define something like this:
+
+    elementFunctions : DomFunctions (Attribute msg) (Attribute Never) (Element msg) (Element Never) msg
+    elementFunctions =
+        { div = Element.column
+        , text = Element.text
+        , input = TODO
+        , ul = Element.column
+        , li = Element.row
+        , on = Element.htmlAttribute (Events.on event decoder)
+        , stopPropagationOn =
+            \event decoder ->
+                Element.htmlAttribute (Events.stopPropagationOn event decoder)
+        , preventDefaultOn =
+            \event decoder ->
+                Element.htmlAttribute (Events.preventDefaultOn event decoder)
+        , attribute =
+            \name value ->
+                Element.htmlAttribute (Attributes.attribute name value)
+        , style =
+            \name value ->
+                Element.htmlAttribute (Attributes.style name value)
+        , attributeMap = \noOp -> Element.mapAttribute (\_ -> noOp)
+        , htmlMap = \noOp -> Element.map (\_ -> noOp)
+        }
+
+-}
+type alias DomFunctions attribute attributeNever html htmlNever msg =
+    { div : List attribute -> List html -> html
+    , text : String -> htmlNever
+    , input : List attribute -> List html -> html
+    , ul : List attribute -> List html -> html
+    , li : List attribute -> List html -> html
+    , on : String -> Decoder msg -> attribute
+    , stopPropagationOn : String -> Decoder ( msg, Bool ) -> attribute
+    , preventDefaultOn : String -> Decoder ( msg, Bool ) -> attribute
+    , attribute : String -> String -> attribute
+    , style : String -> String -> attributeNever
+    , attributeMap : msg -> attributeNever -> attribute
+    , htmlMap : msg -> htmlNever -> html
+    }
+
+
+{-| -}
+type CustomViewConfig a divider attributeNever htmlNever
+    = CustomViewConfig
+        { uniqueId : a -> String
+        , role : Role
+        , visibility : CustomVisibility htmlNever
+        , views : CustomViews a divider attributeNever htmlNever
+        }
+
+
+{-| A replacement for `viewConfig` when you are using your own `customView`
+function.
+-}
+customViewConfig :
+    { uniqueId : a -> String
+    , role : Role
+    , visibility : CustomVisibility htmlNever
+    , views : CustomViews a divider attributeNever htmlNever
+    }
+    -> CustomViewConfig a divider attributeNever htmlNever
+customViewConfig =
+    CustomViewConfig
+
+
+viewConfigToCustom :
+    ViewConfig a divider
+    -> CustomViewConfig a divider (Attribute Never) (Html Never)
+viewConfigToCustom (ViewConfig config) =
+    CustomViewConfig
+        { uniqueId = config.uniqueId
+        , role = config.role
+        , visibility = visibilityToCustom config.visibility
+        , views = config.views
+        }
+
+
+{-| -}
+type CustomVisibility htmlNever
+    = CustomAlways htmlNever
+    | CustomSometimes
+        { whenMatchingWithMinimalValueLength : Maybe Int
+
+        --  TODO
+        --, whenMatchingOnValueChange : Bool
+        , whenRequested :
+            Maybe
+                { checkValue : String -> Bool
+                , empty : htmlNever
+                }
+        }
+
+
+visibilityToCustom : Visibility -> CustomVisibility (Html Never)
+visibilityToCustom visibility =
+    case visibility of
+        Always empty ->
+            CustomAlways empty
+
+        Sometimes conditions ->
+            CustomSometimes
+                { whenMatchingWithMinimalValueLength =
+                    conditions.whenMatchingWithMinimalValueLength
+                , whenRequested = conditions.whenRequested
+                }
+
+
+{-| A replacement for `Views` when you are using your own `customView`
+function. Take a look at its documentation for a description of each field.
+-}
+type alias CustomViews a divider attributeNever htmlNever =
+    { container : DomAttributes attributeNever
+    , input : DomAttributes attributeNever
+    , ul : DomAttributes attributeNever
+    , liOption :
+        { selected : Bool
+        , focused : Bool
+        , hovered : Bool
+        , maybeQuery : Maybe String
+        }
+        -> a
+        -> DomDetails attributeNever htmlNever
+    , liDivider : divider -> DomDetails attributeNever htmlNever
+    }
+
+
+type alias DomAttributes attributeNever =
+    List attributeNever
+
+
+type alias DomDetails attributeNever htmlNever =
+    { attributes : List attributeNever
+    , children : List htmlNever
+    }
+
+
+{-| Create a customized view function for the DOM library of your choice by
+providing some `DomFunctions`.
+-}
+customView :
+    DomFunctions attribute attributeNever html htmlNever msg
+    -> CustomViewConfig a divider attributeNever htmlNever
+    -> Instance a msg
+    -> List (Entry a divider)
+    -> Combobox a
+    -> String
+    -> html
+customView dom (CustomViewConfig config) instance entries (Combobox data) value =
+    let
+        addAriaControls attrs =
+            if isOpen then
+                dom.attribute "aria-controls" (listboxId instance) :: attrs
+
+            else
+                attrs
+
+        addAriaLabelledBy attrs =
+            case instance.label of
+                LabelledBy id ->
+                    dom.attribute "aria-labelledby" id :: attrs
+
+                Label id ->
+                    dom.attribute "aria-label" id :: attrs
+
+                NoLabel ->
+                    attrs
+
+        addAriaActivedescendant attrs =
+            case
+                Listbox.customFocusedEntryId listboxViewConfig
+                    listboxInstance
+                    entries
+                    data.listbox
+            of
+                Nothing ->
+                    attrs
+
+                Just id ->
+                    dom.attribute "aria-activedescendant" id :: attrs
+
+        listboxDom =
+            { ul = dom.ul
+            , li = dom.li
+            , attribute = dom.attribute
+            , on = dom.on
+            , preventDefaultOn = dom.preventDefaultOn
+            , attributeMap = dom.attributeMap
+            , htmlMap = dom.htmlMap
+            }
+
+        listboxViewConfig =
+            Listbox.customViewConfig
+                { uniqueId = config.uniqueId
+                , views =
+                    { ul =
+                        if isOpen then
+                            dom.style "position" "absolute" :: config.views.ul
+
+                        else
+                            dom.style "display" "none"
+                                :: dom.style "position" "absolute"
+                                :: config.views.ul
+                    , liOption = config.views.liOption
+                    , liDivider = config.views.liDivider
+                    , empty = dom.text ""
+                    , focusable = False
+                    , markActiveDescendant = False
+                    }
+                }
+
+        listboxInstance =
+            { id = listboxId instance
+            , label = Listbox.noLabel
+            , lift = ListboxMsg >> instance.lift
+            }
+
+        attributeMap noOp =
+            Attributes.map (\_ -> noOp)
+
+        isOpen =
+            customOpen config.visibility data entries value
+
+        popup =
+            case config.visibility of
+                CustomAlways empty ->
+                    if data.focused && not data.closeRequested then
+                        if List.isEmpty entries then
+                            dom.htmlMap (instance.lift NoOp) empty
+
+                        else
+                            listbox
+
+                    else
+                        dom.htmlMap (instance.lift NoOp) empty
+
+                CustomSometimes conditions ->
+                    if
+                        case conditions.whenMatchingWithMinimalValueLength of
+                            Nothing ->
+                                False
+
+                            Just minimalLength ->
+                                not (List.isEmpty entries)
+                                    && (String.length value >= minimalLength)
+                                    && data.focused
+                                    && not data.closeRequested
+                    then
+                        listbox
+
+                    else
+                        case conditions.whenRequested of
+                            Nothing ->
+                                dom.htmlMap (instance.lift NoOp) (dom.text "")
+
+                            Just { checkValue, empty } ->
+                                if
+                                    checkValue value
+                                        && data.showRequested
+                                        && data.focused
+                                        && not data.closeRequested
+                                then
+                                    if List.isEmpty entries then
+                                        dom.htmlMap (instance.lift NoOp) empty
+
+                                    else
+                                        listbox
+
+                                else
+                                    dom.htmlMap (instance.lift NoOp) (dom.text "")
+
+        listbox =
+            Listbox.customViewUnique listboxDom
+                listboxViewConfig
+                listboxInstance
+                entries
+                data.listbox
+                data.selection
+    in
+    dom.div
+        ([ dom.attribute "role" "combobox"
+         , dom.attribute "aria-expanded" <|
+            if isOpen then
+                "true"
+
+            else
+                "false"
+         , dom.on "mousedown" (Decode.succeed (instance.lift ListboxMousePressed))
+         , dom.on "mouseup" (Decode.succeed (instance.lift ListboxMouseReleased))
+         , dom.on "click"
+            (Decode.at [ "target", "id" ] Decode.string
+                |> Decode.andThen
+                    (\targetId ->
+                        if targetId == inputId instance then
+                            Decode.fail "not handling that click here"
+
+                        else
+                            Decode.succeed (instance.lift ListboxMouseClicked)
+                    )
+            )
+         ]
+            |> appendAttributes (dom.attributeMap (instance.lift NoOp)) config.views.container
+        )
+        [ dom.input
+            ([ dom.attribute "id" (inputId instance)
+             , dom.attribute "type" "text"
+             , dom.attribute "role" <|
+                case config.role of
+                    Textbox ->
+                        "textbox"
+
+                    Searchbox ->
+                        "searchbox"
+             , dom.attribute "aria-multiline" "false"
+             , dom.attribute "aria-autocomplete" <|
+                case config.visibility of
+                    CustomAlways _ ->
+                        "none"
+
+                    CustomSometimes _ ->
+                        "list"
+             , dom.attribute "value" value
+             , Listbox.customPreventDefaultOnKeyDown dom.preventDefaultOn
+                listboxInstance
+                (KeyInfo.decoder
+                    |> Decode.andThen
+                        (\keyInfo ->
+                            case keyInfo.code of
+                                "ArrowUp" ->
+                                    if
+                                        keyInfo.altDown
+                                            && not
+                                                (keyInfo.controlDown
+                                                    || keyInfo.metaDown
+                                                    || keyInfo.shiftDown
+                                                )
+                                    then
+                                        --Decode.succeed
+                                        --    ( instance.lift
+                                        --        (InputAltArrowUpPressed config.visibility)
+                                        --    , True
+                                        --    )
+                                        Decode.fail "TODO"
+
+                                    else
+                                        Decode.fail "not handling that key here"
+
+                                "ArrowDown" ->
+                                    if
+                                        keyInfo.altDown
+                                            && not
+                                                (keyInfo.controlDown
+                                                    || keyInfo.metaDown
+                                                    || keyInfo.shiftDown
+                                                )
+                                    then
+                                        Decode.succeed
+                                            ( instance.lift InputAltArrowDownPressed
+                                            , True
+                                            )
+
+                                    else
+                                        Decode.fail "not handling that key here"
+
+                                "Escape" ->
+                                    Decode.succeed
+                                        ( instance.lift InputEscapePressed
+                                        , True
+                                        )
+
+                                "Enter" ->
+                                    Decode.succeed
+                                        ( instance.lift InputEnterPressed
+                                        , True
+                                        )
+
+                                "Alt" ->
+                                    Decode.fail "not handling that key here"
+
+                                "Control" ->
+                                    Decode.fail "not handling that key here"
+
+                                "Meta" ->
+                                    Decode.fail "not handling that key here"
+
+                                "Shift" ->
+                                    Decode.fail "not handling that key here"
+
+                                _ ->
+                                    Decode.succeed
+                                        ( instance.lift InputOtherKeyPressed
+                                        , False
+                                        )
+                        )
+                )
+             , dom.stopPropagationOn "input"
+                (Decode.map
+                    (\newValue -> ( instance.lift (ValueChanged newValue), True ))
+                    (Decode.at [ "target", "value" ] Decode.string)
+                )
+             , dom.on "focus" (Decode.succeed (instance.lift InputFocused))
+             , dom.on "blur" (Decode.succeed (instance.lift InputBlured))
+             ]
+                |> addAriaControls
+                |> addAriaLabelledBy
+                |> addAriaActivedescendant
+                |> appendAttributes (dom.attributeMap (instance.lift NoOp)) config.views.input
+            )
+            []
+        , popup
+        ]
+
+
+
 ---- HELPER
 
 
@@ -953,6 +1179,41 @@ open visibility data entries value =
                 && not data.closeRequested
 
         Sometimes conditions ->
+            (case conditions.whenMatchingWithMinimalValueLength of
+                Nothing ->
+                    False
+
+                Just minimalLength ->
+                    not (List.isEmpty entries)
+                        && (String.length value >= minimalLength)
+                        && data.focused
+                        && not data.closeRequested
+            )
+                || (case conditions.whenRequested of
+                        Nothing ->
+                            False
+
+                        Just { checkValue, empty } ->
+                            checkValue value
+                                && data.showRequested
+                                && data.focused
+                                && not data.closeRequested
+                   )
+
+
+customOpen :
+    CustomVisibility htmlNever
+    -> ComboboxData a
+    -> List (Entry a divider)
+    -> String
+    -> Bool
+customOpen visibility data entries value =
+    case visibility of
+        CustomAlways empty ->
+            data.focused
+                && not data.closeRequested
+
+        CustomSometimes conditions ->
             (case conditions.whenMatchingWithMinimalValueLength of
                 Nothing ->
                     False

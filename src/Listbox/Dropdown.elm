@@ -567,20 +567,23 @@ customView dom config instance allEntries (Dropdown data) maybeSelection =
                 }
 
         listboxConfig =
-            Listbox.customViewConfig uniqueId
-                { ul =
-                    if data.open then
-                        dom.style "position" "absolute" :: views.ul
+            Listbox.customViewConfig
+                { uniqueId = uniqueId
+                , views =
+                    { ul =
+                        if data.open then
+                            dom.style "position" "absolute" :: views.ul
 
-                    else
-                        dom.style "display" "none"
-                            :: dom.style "position" "absolute"
-                            :: views.ul
-                , liOption = views.liOption
-                , liDivider = views.liDivider
-                , empty = dom.text ""
-                , focusable = True
-                , markActiveDescendant = True
+                        else
+                            dom.style "display" "none"
+                                :: dom.style "position" "absolute"
+                                :: views.ul
+                    , liOption = views.liOption
+                    , liDivider = views.liDivider
+                    , empty = dom.text ""
+                    , focusable = True
+                    , markActiveDescendant = True
+                    }
                 }
     in
     dom.div
