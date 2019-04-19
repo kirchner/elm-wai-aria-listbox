@@ -5,3 +5,6 @@ docs:
 
 examples:
 	$(MAKE) -C examples
+
+publish: examples
+	cd examples/gh-pages; git add .; git ci -mupdate; git push
