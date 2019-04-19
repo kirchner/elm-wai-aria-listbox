@@ -1,6 +1,7 @@
 module Listbox exposing
-    ( Listbox, init, view, Instance, Label, labelledBy, label, noLabel
+    ( view, Instance, Label, labelledBy, label, noLabel
     , Entry, option, divider
+    , Listbox, init
     , update, Msg, subscriptions
     , UpdateConfig, updateConfig, Behaviour
     , ViewConfig, viewConfig, Views, noDivider
@@ -8,13 +9,13 @@ module Listbox exposing
     , TypeAhead, noTypeAhead, simpleTypeAhead, typeAhead
     , viewUnique, updateUnique
     , focusEntryUnique, focusNextOrFirstEntryUnique, focusPreviousOrFirstEntryUnique
-    , customViewUnique
     , focusedEntry, focusedEntryId, hoveredEntry
     , focusEntry, focusNextOrFirstEntry, focusPreviousOrFirstEntry
     , focus
     , scrollToFocus
     , preventDefaultOnKeyDown
-    , customView, DomFunctions
+    , customView, customViewUnique
+    , DomFunctions
     , CustomViewConfig, customViewConfig, CustomViews
     , customPreventDefaultOnKeyDown
     )
@@ -28,9 +29,23 @@ widget](https://www.w3.org/TR/wai-aria-practices-1.1/#Listbox):
 Take a look at the documentation of `Behaviour` for the default keyboard
 interactions this widget offers.
 
-@docs Listbox, init, view, Instance, Label, labelledBy, label, noLabel
+
+# View
+
+@docs view, Instance, Label, labelledBy, label, noLabel
+
+
+# Entry
 
 @docs Entry, option, divider
+
+
+# State
+
+@docs Listbox, init
+
+
+# Update
 
 @docs update, Msg, subscriptions
 
@@ -65,8 +80,6 @@ section.
 
 @docs focusEntryUnique, focusNextOrFirstEntryUnique, focusPreviousOrFirstEntryUnique
 
-@docs customViewUnique
-
 
 # Advanced usage
 
@@ -95,7 +108,9 @@ section.
 You can use these functions if you want to use other DOM libraries, like for
 example `rtfeldman/elm-css` or `mdgriffith/elm-ui`.
 
-@docs customView, DomFunctions
+@docs customView, customViewUnique
+
+@docs DomFunctions
 
 @docs CustomViewConfig, customViewConfig, CustomViews
 
@@ -129,6 +144,7 @@ import Html exposing (Attribute, Html)
 import Html.Attributes as Attributes
 import Html.Events as Events
 import Internal.KeyInfo as KeyInfo exposing (KeyInfo)
+import Internal.Label as Internal
 import Internal.Listbox as Internal
 import Json.Decode as Decode exposing (Decoder)
 import Json.Decode.Pipeline as Decode
@@ -550,10 +566,10 @@ type alias Instance a msg =
 
 
 {-| There are three possibilities to label a listbox: it can be
-`LabelledBy` by another DOM element with the given id, it can provide its own
-`Label`, or it can have `NoLabel` at all.
+`labelledBy` by another DOM element with the given id, it can provide its own
+`label`, or it can have `noLabel` at all.
 
-The last case is only allowed when the combobox is part of another widget which
+The last case is only allowed when the listbox is part of another widget which
 itself is labelled.
 
 -}

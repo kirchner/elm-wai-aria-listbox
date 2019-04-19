@@ -56,6 +56,7 @@ import Html exposing (Attribute, Html)
 import Html.Attributes as Attributes
 import Html.Events as Events
 import Internal.KeyInfo as KeyInfo exposing (KeyInfo)
+import Internal.Label exposing (Label(..))
 import Json.Decode as Decode exposing (Decoder)
 import Listbox as Listbox
     exposing
@@ -325,13 +326,13 @@ this information to the `view` function:
 
   - **id**: The unique id of the listbox.
 
-  - **labelledBy**: The unique id of a label element describing the content of
-    the listbox.
+  - **label**: Specify how the dropdown listbox is labelled. See `Label` for
+    possible options.
 
 -}
 type alias Instance msg a =
     { id : String
-    , labelledBy : String
+    , label : Label
     , lift : Msg a -> msg
     }
 
@@ -633,7 +634,7 @@ customView dom config instance allEntries (Dropdown data) maybeSelection =
                 }
                 listboxConfig
                 { id = printListboxId instance.id
-                , label = Listbox.labelledBy instance.labelledBy
+                , label = instance.label
                 , lift = instance.lift << ListboxMsg (Just instance.id)
                 }
                 allEntries
@@ -651,7 +652,7 @@ viewButton :
     -> html
 viewButton dom instance { attributes, children } selection open =
     let
-        { id, labelledBy, lift } =
+        { id, label, lift } =
             instance
 
         setAriaExpanded attrs =
@@ -660,11 +661,21 @@ viewButton dom instance { attributes, children } selection open =
 
             else
                 dom.attribute "aria-expanded" "false" :: attrs
+
+        addAriaLabelledBy attrs =
+            case label of
+                LabelledBy labelledBy ->
+                    dom.attribute "aria-labelledby" labelledBy :: attrs
+
+                Label label_ ->
+                    dom.attribute "aria-label" label_ :: attrs
+
+                NoLabel ->
+                    attrs
     in
     dom.button
         ([ dom.attribute "id" (printButtonId id)
          , dom.attribute "type" "button"
-         , dom.attribute "aria-labelledby" (printButtonId id ++ " " ++ labelledBy)
          , dom.attribute "aria-haspopup" "listbox"
          , dom.attribute "tabindex" "0"
          , dom.on "keypress"
@@ -674,11 +685,11 @@ viewButton dom instance { attributes, children } selection open =
                         case key of
                             "Space" ->
                                 Decode.succeed
-                                    (lift (ButtonClicked { id = id, labelledBy = labelledBy }))
+                                    (lift (ButtonClicked { id = id, label = label }))
 
                             "Enter" ->
                                 Decode.succeed
-                                    (lift (ButtonClicked { id = id, labelledBy = labelledBy }))
+                                    (lift (ButtonClicked { id = id, label = label }))
 
                             _ ->
                                 Decode.fail "not handling that key here"
@@ -686,7 +697,7 @@ viewButton dom instance { attributes, children } selection open =
             )
          , dom.on "click"
             (Decode.succeed
-                (lift (ButtonClicked { id = id, labelledBy = labelledBy }))
+                (lift (ButtonClicked { id = id, label = label }))
             )
          , dom.on "keydown"
             (Decode.field "key" Decode.string
@@ -694,21 +705,19 @@ viewButton dom instance { attributes, children } selection open =
             )
          ]
             |> setAriaExpanded
+            |> addAriaLabelledBy
             |> appendAttributes (dom.attributeMap (lift NoOp))
                 (dom.style "position" "relative" :: attributes)
         )
         (List.map (dom.htmlMap (lift NoOp)) children)
 
 
-buttonKeyDown :
-    Instance msg a
-    -> String
-    -> Decoder msg
-buttonKeyDown { id, labelledBy, lift } code =
+buttonKeyDown : Instance msg a -> String -> Decoder msg
+buttonKeyDown { id, label, lift } code =
     let
         ids =
             { id = id
-            , labelledBy = labelledBy
+            , label = label
             }
     in
     case code of
@@ -744,11 +753,11 @@ printListboxId id =
 -}
 type Msg a
     = NoOp
-    | NextAnimationFrame { id : String, labelledBy : String }
+    | NextAnimationFrame { id : String, label : Label }
       -- BUTTON
-    | ButtonClicked { id : String, labelledBy : String }
-    | ButtonArrowUpPressed { id : String, labelledBy : String }
-    | ButtonArrowDownPressed { id : String, labelledBy : String }
+    | ButtonClicked { id : String, label : Label }
+    | ButtonArrowUpPressed { id : String, label : Label }
+    | ButtonArrowDownPressed { id : String, label : Label }
       -- LISTBOX
     | ListboxMsg (Maybe String) (Listbox.Msg a)
     | ListboxEscapePressed String
@@ -825,7 +834,7 @@ update (UpdateConfig { uniqueId, behaviour }) allEntries msg dropdown maybeSelec
                     , Task.attempt (\_ -> NoOp) <|
                         Listbox.focus
                             { id = printListboxId ids.id
-                            , label = Listbox.labelledBy ids.labelledBy
+                            , label = ids.label
                             , lift = ListboxMsg (Just ids.id)
                             }
                     , maybeSelection
@@ -837,7 +846,7 @@ update (UpdateConfig { uniqueId, behaviour }) allEntries msg dropdown maybeSelec
             , Task.attempt (\_ -> NoOp) <|
                 Listbox.focus
                     { id = printListboxId ids.id
-                    , label = Listbox.labelledBy ids.labelledBy
+                    , label = ids.label
                     , lift = ListboxMsg (Just ids.id)
                     }
             , maybeSelection
@@ -865,7 +874,7 @@ update (UpdateConfig { uniqueId, behaviour }) allEntries msg dropdown maybeSelec
             , Task.attempt (\_ -> NoOp) <|
                 Listbox.focus
                     { id = printListboxId ids.id
-                    , label = Listbox.labelledBy ids.labelledBy
+                    , label = ids.label
                     , lift = ListboxMsg (Just ids.id)
                     }
             , newSelection
@@ -893,7 +902,7 @@ update (UpdateConfig { uniqueId, behaviour }) allEntries msg dropdown maybeSelec
             , Task.attempt (\_ -> NoOp) <|
                 Listbox.focus
                     { id = printListboxId ids.id
-                    , label = Listbox.labelledBy ids.labelledBy
+                    , label = ids.label
                     , lift = ListboxMsg (Just ids.id)
                     }
             , newSelection

@@ -1,5 +1,5 @@
 module Listbox.Combobox exposing
-    ( Combobox, init, view, Instance, Label, label, labelledBy, noLabel
+    ( Combobox, init, view, Instance
     , update, Msg, subscriptions
     , UpdateConfig, updateConfig, Behaviour
     , ViewConfig, viewConfig, Role(..), Visibility(..), Views
@@ -16,7 +16,7 @@ widget](https://www.w3.org/TR/wai-aria-practices-1.1/#combobox):
 In this module the pop-up is a listbox. Take a look at the documentation of `Behaviour` for the default keyboard
 interactions this widget offers.
 
-@docs Combobox, init, view, Instance, Label, label, labelledBy, noLabel
+@docs Combobox, init, view, Instance
 
 @docs update, Msg, subscriptions
 
@@ -57,6 +57,7 @@ import Html exposing (Attribute, Html)
 import Html.Attributes as Attributes
 import Html.Events as Events
 import Internal.KeyInfo as KeyInfo
+import Internal.Label exposing (Label(..))
 import Json.Decode as Decode
 import Listbox exposing (Entry, Listbox)
 
@@ -112,38 +113,6 @@ type alias Instance a msg =
     , label : Label
     , lift : Msg a -> msg
     }
-
-
-{-| There are three possibilities to label a combox: it can be
-`labelledBy` by another DOM element with the given id, it can provide its own
-`label`, or it can have `noLabel` at all.
-
-The last case is only allowed when the combobox is part of another widget which
-itself is labelled.
-
--}
-type Label
-    = LabelledBy String
-    | Label String
-    | NoLabel
-
-
-{-| -}
-labelledBy : String -> Label
-labelledBy =
-    LabelledBy
-
-
-{-| -}
-label : String -> Label
-label =
-    Label
-
-
-{-| -}
-noLabel : Label
-noLabel =
-    NoLabel
 
 
 {-| Take a list of all entries and the value of the textbox and display it as

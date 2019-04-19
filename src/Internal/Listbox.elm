@@ -6,7 +6,6 @@ module Internal.Listbox exposing
     , EntryDomData
     , Focus(..)
     , Instance
-    , Label(..)
     , Listbox
     , Msg(..)
     , Query(..)
@@ -35,6 +34,7 @@ module Internal.Listbox exposing
 import Browser.Dom as Dom
 import Dict
 import Internal.KeyInfo as KeyInfo exposing (KeyInfo)
+import Internal.Label exposing (Label(..))
 import Json.Decode as Decode exposing (Decoder)
 import Json.Decode.Pipeline as Decode
 import List.Extra as List
@@ -336,12 +336,6 @@ type alias Instance a msg =
     , label : Label
     , lift : Msg a -> msg
     }
-
-
-type Label
-    = LabelledBy String
-    | Label String
-    | NoLabel
 
 
 view :
