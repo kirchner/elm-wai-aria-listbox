@@ -5,7 +5,16 @@ module Listbox.Combobox exposing
     , ViewConfig, viewConfig, Role(..), Visibility(..), Views
     )
 
-{-|
+{-| Implementation of the [combobox
+widget](https://www.w3.org/TR/wai-aria-practices-1.1/#combobox):
+
+> A combobox is a widget made up of the combination of two distinct elements:
+>
+> 1.  a single-line textbox, and
+> 2.  an associated pop-up element for helping users set the value of the textbox.
+
+In this module the pop-up is a listbox. Take a look at the documentation of `Behaviour` for the default keyboard
+interactions this widget offers.
 
 @docs Combobox, init, view, Instance, Label, label, labelledBy, noLabel
 
@@ -53,7 +62,8 @@ import Listbox exposing (Entry, Listbox)
 import Listbox.Unique
 
 
-{-| TODO
+{-| Tracks the keyboard and mouse focus in the pop-up. The value of the textbox
+as well as the (filtered) list of entries live in your own model.
 -}
 type Combobox a
     = Combobox (ComboboxData a)
@@ -69,7 +79,7 @@ type alias ComboboxData a =
     }
 
 
-{-| TODO
+{-| An initial combobox with no option focused.
 -}
 init : Combobox a
 init =
@@ -87,7 +97,16 @@ init =
 ---- VIEW
 
 
-{-| TODO
+{-| To make a listbox unique in your application you have to provide this
+information to the `view` function:
+
+  - **id**: The unique id of the listbox.
+
+  - **label**: Specify how the combobox is labelled. See `Label` for
+    possible options.
+
+  - **lift**: Your message type constructor wrapping the listbox `Msg`'s.
+
 -}
 type alias Instance a msg =
     { id : String
@@ -96,7 +115,13 @@ type alias Instance a msg =
     }
 
 
-{-| TODO
+{-| There are three possibilities to label a combox: it can be
+`labelledBy` by another DOM element with the given id, it can provide its own
+`label`, or it can have `noLabel` at all.
+
+The last case is only allowed when the combobox is part of another widget which
+itself is labelled.
+
 -}
 type Label
     = LabelledBy String
@@ -104,28 +129,55 @@ type Label
     | NoLabel
 
 
-{-| TODO
--}
+{-| -}
 labelledBy : String -> Label
 labelledBy =
     LabelledBy
 
 
-{-| TODO
--}
+{-| -}
 label : String -> Label
 label =
     Label
 
 
-{-| TODO
--}
+{-| -}
 noLabel : Label
 noLabel =
     NoLabel
 
 
-{-| TODO
+{-| Take a list of all entries and the value of the textbox and display it as
+a combobox. Note, that you have to filter the entries yourself. You have to
+provide a `ViewConfig` for the styling and an `Instance` to uniquely identify
+this combobox. For example:
+
+    view : Combobox -> String -> Html Msg
+    view combobox value =
+        let
+            matchingFruits =
+                fruits
+                    |> List.filter (String.contains value)
+                    |> List.map Listbox.option
+        in
+        Html.div []
+            [ Combobox.view viewConfig
+                { id = "fruits-combobox"
+                , label = label "fruits"
+                , lift = ComboboxMsg
+                }
+                matchingFruits
+                combobox
+                value
+            ]
+
+    fruits : List String
+    fruits =
+        [ "Apple", "Banana", "Cherry" ]
+
+    type Msg
+        = ComboboxMsg Combobox.Msg
+
 -}
 view :
     ViewConfig a divider
@@ -404,7 +456,7 @@ appendAttributes attributeFromNever neverAttrs attrs =
 ---- UPDATE
 
 
-{-| TODO
+{-| The combobox's message type.
 -}
 type Msg a
     = NoOp
@@ -422,7 +474,39 @@ type Msg a
     | ListboxMouseClicked
 
 
-{-| TODO
+{-| Use this function to update the combobox state. You have to provide the
+same entries and value as given to your view function. Note, that you have to
+filter the entries yourself.
+
+For example:
+
+    update msg model =
+        case msg of
+            ComboboxMsg comboboxMsg ->
+                let
+                    ( newCombobox, comboboxCmd, newValue ) =
+                        Combobox.update updateConfig
+                            matchingFruits
+                            comboboxMsg
+                            model.combobox
+                            model.value
+
+                    matchingFruits =
+                        fruits
+                            |> List.filter
+                                (String.contains model.value)
+                            |> List.map Listbox.option
+                in
+                ( { model
+                    | combobox = newCombobox
+                    , value = newValue
+                  }
+                , Cmd.map ComboboxMsg comboboxCmd
+                )
+
+In a more sophisticated example, the entries could be dynamic, as well. (For
+example, loaded via an HTTP request.)
+
 -}
 update :
     UpdateConfig a
@@ -431,7 +515,7 @@ update :
     -> Combobox a
     -> String
     -> ( Combobox a, Cmd (Msg a), String )
-update (UpdateConfig uniqueId behaviour) entries msg ((Combobox data) as combobox) value =
+update (UpdateConfig cfg) entries msg ((Combobox data) as combobox) value =
     case msg of
         NoOp ->
             ( combobox, Cmd.none, value )
@@ -461,7 +545,7 @@ update (UpdateConfig uniqueId behaviour) entries msg ((Combobox data) as combobo
             if open visibility data entries value then
                 if
                     Listbox.focusedEntry
-                        (listboxUpdateConfig uniqueId behaviour)
+                        (listboxUpdateConfig cfg.uniqueId cfg.behaviour)
                         entries
                         data.listbox
                         == Nothing
@@ -499,7 +583,7 @@ update (UpdateConfig uniqueId behaviour) entries msg ((Combobox data) as combobo
         InputEscapePressed ->
             ( Combobox { data | focused = False }
             , Cmd.none
-            , if behaviour.clearOnEscape then
+            , if cfg.behaviour.clearOnEscape then
                 ""
 
               else
@@ -520,7 +604,7 @@ update (UpdateConfig uniqueId behaviour) entries msg ((Combobox data) as combobo
                             , closeRequested = True
                         }
                     , Cmd.none
-                    , behaviour.entryToValue a
+                    , cfg.behaviour.entryToValue a
                     )
 
         InputOtherKeyPressed ->
@@ -543,7 +627,7 @@ update (UpdateConfig uniqueId behaviour) entries msg ((Combobox data) as combobo
         ListboxMsg listboxMsg ->
             let
                 ( newListbox, listboxCmd, newSelection ) =
-                    Listbox.Unique.update (listboxUpdateConfig uniqueId behaviour)
+                    Listbox.Unique.update (listboxUpdateConfig cfg.uniqueId cfg.behaviour)
                         entries
                         listboxMsg
                         data.listbox
@@ -584,7 +668,7 @@ update (UpdateConfig uniqueId behaviour) entries msg ((Combobox data) as combobo
                             , closeRequested = True
                         }
                     , Cmd.none
-                    , behaviour.entryToValue a
+                    , cfg.behaviour.entryToValue a
                     )
 
 
@@ -605,7 +689,12 @@ listboxUpdateConfig uniqueId behaviour =
 ---- SUBSCRIPTIONS
 
 
-{-| TODO
+{-| Do not forget to add this to your subscriptions:
+
+    subscriptions model =
+        Sub.map ComboboxMsg
+            (Combobox.subscriptions model.combobox)
+
 -}
 subscriptions : Combobox a -> Sub (Msg a)
 subscriptions (Combobox data) =
@@ -616,8 +705,7 @@ subscriptions (Combobox data) =
 ---- CONFIGURATION
 
 
-{-| TODO
--}
+{-| -}
 type ViewConfig a divider
     = ViewConfig
         { uniqueId : a -> String
@@ -627,7 +715,16 @@ type ViewConfig a divider
         }
 
 
-{-| TODO
+{-| Generate a `ViewConfig` by providing the following:
+
+  - **uniqueId**: A hash function for the entries.
+
+  - **role**: The role of the textbox.
+
+  - **visibility**: When should the pop-up be displayed?
+
+  - **views**: View customizations.
+
 -}
 viewConfig :
     { uniqueId : a -> String
@@ -640,14 +737,23 @@ viewConfig =
     ViewConfig
 
 
-{-| TODO
+{-| The textbox of the combobox can have one of these two roles.
 -}
 type Role
     = Textbox
     | Searchbox
 
 
-{-| TODO
+{-| Provided the list of entries is not empty, when should the pop-up be
+visible? Either `Always` or `Sometimes` when at least one of the following
+conditions are met:
+
+  - **whenMatchingWithMinimalValueLength**: The value has a minimum length.
+
+  - **whenRequested**: The display was explicitely requested by the user, for
+    example by pressing `Alt + Down`. Also, `checkValue` which is given the
+    current value, must evaluate to `True`.
+
 -}
 type Visibility
     = Always (Html Never)
@@ -664,7 +770,88 @@ type Visibility
         }
 
 
-{-| TODO
+{-| **Available view customizations**
+
+This is part of the arguments to `viewConfig`. You can customize the styling
+with the following fields:
+
+  - **container**: A list of html attributes applied to the container div which
+    holds the combobox.
+
+  - **input**: A list of html attributes applied to the textbox.
+
+  - **ul**: A list of html attributes applied to the pop-up listbox.
+
+  - **liOption**: A function returning `HtmlDetails` for each option in your
+    entries list. It gets the actual option value `a` and flags telling you if
+    this option is currently `selected`, `focused` or `hovered`. If the user
+    typed in a query, you get this via the `maybeQuery` field.
+
+  - **liDivider**: This lets you style the divider list entries. It gets the
+    actual `divider` entry and returns `HtmlDetails`.
+
+The DOM structure of a combobox with visible pop-up will be something like
+this:
+
+    comboboxOpen =
+        Html.div
+            [ ... ] -- container attributes
+            [ Html.input
+                [ ... ] -- input attributes
+                []
+            , Html.ul
+                [ ... ] -- ul attributes
+                [ Html.li
+                    [ ... ] -- liDivider attributes
+                    [ ... ] -- liDivider children
+                , Html.li
+                    [ ... ] -- liOption attributes
+                    [ ... ] -- liOption children
+                , ...
+                , Html.li
+                    [ ... ] -- liOption attributes
+                    [ ... ] -- liOption children
+                ]
+            ]
+
+When the pop-up is not visible, it will look like this:
+
+    comboboxClosed =
+        Html.div
+            [ ... ] -- container attributes
+            [ Html.input
+                [ ... ] -- input attributes
+                []
+            ]
+
+Provided you have specified some CSS classes, a view configuration could look
+like this:
+
+    views : Views String Never
+    views =
+        { container =
+            [ Html.Attributes.class "combobox__container" ]
+        , input = [ Html.Attributes.class "combobox__input" ]
+        , ul = [ Html.Attributes.class "listbox__container" ]
+        , liOption =
+            \{ selected, focused } option ->
+                { attributes =
+                    [ Html.Attributes.class "listbox__option"
+                    , Html.Attributes.classList
+                        [ ( "listbox__option--selected"
+                          , selected
+                          )
+                        , ( "listbox__option--keyboardFocused"
+                          , focused
+                          )
+                        ]
+                    ]
+                , children =
+                    [ Html.text option ]
+                }
+        , liDivider = noDivider
+        }
+
 -}
 type alias Views a divider =
     { container : HtmlAttributes
@@ -692,20 +879,71 @@ type alias HtmlDetails =
     }
 
 
-{-| TODO
--}
+{-| -}
 type UpdateConfig a
-    = UpdateConfig (a -> String) (Behaviour a)
+    = UpdateConfig
+        { uniqueId : a -> String
+        , behaviour : Behaviour a
+        }
 
 
-{-| TODO
+{-| Generate an `UpdateConfig` by providing the following:
+
+  - **uniqueId**: A hash function for the entries.
+
+  - **behaviour**: Behaviour customizations.
+
 -}
-updateConfig : (a -> String) -> Behaviour a -> UpdateConfig a
+updateConfig :
+    { uniqueId : a -> String
+    , behaviour : Behaviour a
+    }
+    -> UpdateConfig a
 updateConfig =
     UpdateConfig
 
 
-{-| TODO
+{-| **Available behaviour customizations**
+
+You can customize the behaviour of the combobox with the following options:
+
+  - **entryToValue**: How to transform an entry into a `String`. This will be
+    the new value when an entry gets selected in the listbox.
+
+  - **clearOnEscape**: Should the textbox be cleared when the pop-up is
+    dismissed by pressing Escape?
+
+  - **separateFocus**: Whether the mouse focus and the keyboard focus can be
+    different.
+
+  - **handleHomeAndEnd**: Should we handle the `Home` and `End` keys (to jump
+    to the top or bottom of the list)?
+
+  - **minimalGap**: If the distance (in px) of the option having the keyboard
+    focus to the borders of the listbox's viewport is smaller then this value,
+    the listbox will adjust its scroll position so that this distance is at least
+    `initialGap`.
+
+  - **initialGap**: The minimal distance (in px) of the option having the
+    keyboard focus to the borders of the listbox's viewport after the scroll
+    position has been adjusted.
+
+A behaviour configuration could look something like this:
+
+    behaviour : Behaviour String
+    behaviour =
+        { entryToValue = identity
+        , clearOnEscape = False
+        , separateFocus = True
+        , handleHomeAndEnd = True
+        , minimalGap = 30
+        , initialGap = 200
+        }
+
+The listbox will behave as explained in the [WAI-ARIA Authoring Practices
+1.1](https://www.w3.org/TR/wai-aria-practices-1.1/#combobox) in the _Keyboard
+Interaction_ section.
+
 -}
 type alias Behaviour a =
     { entryToValue : a -> String

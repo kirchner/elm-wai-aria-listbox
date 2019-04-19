@@ -144,13 +144,16 @@ view model =
 
 updateConfig : Combobox.UpdateConfig String
 updateConfig =
-    Combobox.updateConfig identity
-        { entryToValue = identity
-        , clearOnEscape = True
-        , separateFocus = True
-        , handleHomeAndEnd = True
-        , minimalGap = 0
-        , initialGap = 0
+    Combobox.updateConfig
+        { uniqueId = identity
+        , behaviour =
+            { entryToValue = identity
+            , clearOnEscape = True
+            , separateFocus = True
+            , handleHomeAndEnd = True
+            , minimalGap = 0
+            , initialGap = 0
+            }
         }
 
 

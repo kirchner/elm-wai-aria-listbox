@@ -503,7 +503,8 @@ information to the `view` function:
 
   - **id**: The unique id of the listbox.
 
-  - **labelledBy**: TODO
+  - **label**: Specify how the listbox is labelled. See `Label` for
+    possible options.
 
   - **lift**: Your message type constructor wrapping the listbox `Msg`'s.
 
@@ -515,28 +516,31 @@ type alias Instance a msg =
     }
 
 
-{-| TODO
+{-| There are three possibilities to label a listbox: it can be
+`LabelledBy` by another DOM element with the given id, it can provide its own
+`Label`, or it can have `NoLabel` at all.
+
+The last case is only allowed when the combobox is part of another widget which
+itself is labelled.
+
 -}
 type alias Label =
     Internal.Label
 
 
-{-| TODO
--}
+{-| -}
 labelledBy : String -> Label
 labelledBy =
     Internal.LabelledBy
 
 
-{-| TODO
--}
+{-| -}
 label : String -> Label
 label =
     Internal.Label
 
 
-{-| TODO
--}
+{-| -}
 noLabel : Label
 noLabel =
     Internal.NoLabel
@@ -551,7 +555,7 @@ to uniquely identify this listbox. For example:
         Html.div []
             [ Listbox.view viewConfig
                 { id = "fruits-listbox"
-                , labelledBy = "fruits"
+                , label = label "fruits"
                 , lift = ListboxMsg
                 }
                 fruits
