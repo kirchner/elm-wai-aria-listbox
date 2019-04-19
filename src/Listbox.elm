@@ -678,7 +678,7 @@ preventDefaultOnKeyDown =
     Internal.preventDefaultOnKeyDown Events.preventDefaultOn
 
 
-{-| TODO
+{-| Returns the HTML id of the currently focused entry.
 -}
 focusedEntryId :
     ViewConfig a divider
