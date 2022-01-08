@@ -955,21 +955,8 @@ customView dom (CustomViewConfig config) instance entries (Combobox data) value 
         listboxViewConfig =
             Listbox.customViewConfig
                 { uniqueId = config.uniqueId
-                , views =
-                    { ul =
-                        if isOpen then
-                            dom.style "position" "absolute" :: config.views.ul
-
-                        else
-                            dom.style "display" "none"
-                                :: dom.style "position" "absolute"
-                                :: config.views.ul
-                    , liOption = config.views.liOption
-                    , liDivider = config.views.liDivider
-                    , empty = dom.text ""
-                    , focusable = False
-                    , markActiveDescendant = False
-                    }
+                , focusable = False
+                , markActiveDescendant = False
                 }
 
         listboxInstance =
@@ -1034,6 +1021,18 @@ customView dom (CustomViewConfig config) instance entries (Combobox data) value 
 
         listbox =
             Listbox.customViewUnique listboxDom
+                { ul =
+                    if isOpen then
+                        dom.style "position" "absolute" :: config.views.ul
+
+                    else
+                        dom.style "display" "none"
+                            :: dom.style "position" "absolute"
+                            :: config.views.ul
+                , liOption = config.views.liOption
+                , liDivider = config.views.liDivider
+                , empty = dom.text ""
+                }
                 listboxViewConfig
                 listboxInstance
                 entries

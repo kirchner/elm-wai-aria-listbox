@@ -258,9 +258,10 @@ scrollToFocus behaviour id listbox =
 ---- VIEW CONFIG
 
 
-type alias ViewConfig a divider attributeNever htmlNever =
+type alias ViewConfig a =
     { uniqueId : a -> String
-    , views : Views a divider attributeNever htmlNever
+    , focusable : Bool
+    , markActiveDescendant : Bool
     }
 
 
@@ -276,8 +277,6 @@ type alias Views a divider attributeNever htmlNever =
         -> DomDetails attributeNever htmlNever
     , liDivider : divider -> DomDetails attributeNever htmlNever
     , empty : htmlNever
-    , focusable : Bool
-    , markActiveDescendant : Bool
     }
 
 
@@ -343,18 +342,19 @@ type alias Instance a msg =
 view :
     Bool
     -> DomFunctions attribute attributeNever html htmlNever msg
-    -> ViewConfig a divider attributeNever htmlNever
+    -> Views a divider attributeNever htmlNever
+    -> ViewConfig a
     -> Instance a msg
     -> List (Entry a divider)
     -> Listbox
     -> List a
     -> html
-view multiSelectable dom config instance allEntries listbox selection =
+view multiSelectable dom views config instance allEntries listbox selection =
     let
         { id, lift, label } =
             instance
 
-        { uniqueId, views } =
+        { uniqueId } =
             config
 
         viewEntryHelp entry =
@@ -374,6 +374,7 @@ view multiSelectable dom config instance allEntries listbox selection =
                             List.any ((==) option) selection
                     in
                     viewEntry dom
+                        views
                         multiSelectable
                         focused
                         hovered
@@ -385,6 +386,7 @@ view multiSelectable dom config instance allEntries listbox selection =
 
                 Divider _ ->
                     viewEntry dom
+                        views
                         multiSelectable
                         False
                         False
@@ -406,7 +408,7 @@ view multiSelectable dom config instance allEntries listbox selection =
                     attrs
 
         addAriaActivedescendant focus attrs =
-            if views.markActiveDescendant then
+            if config.markActiveDescendant then
                 let
                     setHelp a =
                         dom.attribute "aria-activedescendant"
@@ -440,7 +442,7 @@ view multiSelectable dom config instance allEntries listbox selection =
              ]
                 |> addAriaLabelledBy
                 |> addAriaActivedescendant (currentFocus listbox.focus)
-                |> setTabindex dom.attribute views.focusable
+                |> setTabindex dom.attribute config.focusable
                 |> appendAttributes (dom.attributeMap (lift NoOp)) views.ul
             )
             (List.map viewEntryHelp allEntries)
@@ -448,18 +450,19 @@ view multiSelectable dom config instance allEntries listbox selection =
 
 viewEntry :
     DomFunctions attribute attributeNever html htmlNever msg
+    -> Views a divider attributeNever htmlNever
     -> Bool
     -> Bool
     -> Bool
     -> Bool
-    -> ViewConfig a divider attributeNever htmlNever
+    -> ViewConfig a
     -> Instance a msg
     -> Query
     -> Entry a divider
     -> html
-viewEntry dom multiSelectable focused hovered selected config instance query entry =
+viewEntry dom views multiSelectable focused hovered selected config instance query entry =
     let
-        { uniqueId, views } =
+        { uniqueId } =
             config
 
         { id, lift } =
@@ -639,7 +642,7 @@ preventDefaultOnKeyDown preventDefaultOn { id, lift } keyDownDecoder =
 
 
 focusedEntryId :
-    ViewConfig a divider attributeNever htmlNever
+    ViewConfig a
     -> Instance a msg
     -> List (Entry a divider)
     -> Listbox

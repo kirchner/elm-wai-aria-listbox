@@ -292,7 +292,7 @@ scrollToFocus behaviour { id, lift } listbox =
 
 {-| -}
 type ViewConfig a divider
-    = ViewConfig (Internal.ViewConfig a divider (Attribute Never) (Html Never))
+    = ViewConfig (Internal.ViewConfig a)
 
 
 {-| Generate a `ViewConfig` by providing the following:
@@ -306,7 +306,8 @@ You usually do **not** want to store this inside your model.
 -}
 viewConfig :
     { uniqueId : a -> String
-    , views : Views a divider
+    , focusable : Bool
+    , markActiveDescendant : Bool
     }
     -> ViewConfig a divider
 viewConfig =
@@ -626,14 +627,15 @@ to uniquely identify this listbox. For example:
 
 -}
 view :
-    ViewConfig a divider
+    Internal.Views a divider (Attribute Never) (Html Never)
+    -> ViewConfig a divider
     -> Instance a msg
     -> List (Entry a divider)
     -> Listbox
     -> List a
     -> Html msg
-view (ViewConfig config) instance allEntries listbox selection =
-    Internal.view True htmlFunctions config instance allEntries listbox selection
+view views (ViewConfig config) instance allEntries listbox selection =
+    Internal.view True htmlFunctions views config instance allEntries listbox selection
 
 
 htmlFunctions : DomFunctions (Attribute msg) (Attribute Never) (Html msg) (Html Never) msg
@@ -700,14 +702,15 @@ of this function and the one of `view` is that the last argument is a `Maybe a`
 instead of a `List a`.
 -}
 viewUnique :
-    ViewConfig a divider
+    Internal.Views a divider (Attribute Never) (Html Never)
+    -> ViewConfig a divider
     -> Instance a msg
     -> List (Entry a divider)
     -> Listbox
     -> Maybe a
     -> Html msg
-viewUnique (ViewConfig config) cfg entries listbox selection =
-    Internal.view False htmlFunctions config cfg entries listbox (maybeToList selection)
+viewUnique views (ViewConfig config) cfg entries listbox selection =
+    Internal.view False htmlFunctions views config cfg entries listbox (maybeToList selection)
 
 
 {-| Use this instead of `customView` if the user can only select **at
@@ -717,14 +720,15 @@ a `Maybe a` instead of a `List a`.
 -}
 customViewUnique :
     DomFunctions attribute attributeNever html htmlNever msg
-    -> CustomViewConfig a divider attributeNever htmlNever
+    -> Internal.Views a divider attributeNever htmlNever
+    -> CustomViewConfig a
     -> Instance a msg
     -> List (Entry a divider)
     -> Listbox
     -> Maybe a
     -> html
-customViewUnique dom (CustomViewConfig config) cfg entries listbox selection =
-    Internal.view False dom config cfg entries listbox (maybeToList selection)
+customViewUnique dom views (CustomViewConfig config) cfg entries listbox selection =
+    Internal.view False dom views config cfg entries listbox (maybeToList selection)
 
 
 {-| Use this function instead of `update` if the user can only
@@ -830,15 +834,16 @@ listToMaybe listA =
 providing some `DomFunctions`.
 -}
 customView :
-    DomFunctions attribute attributeNever html htmlNever msg
-    -> CustomViewConfig a divider attributeNever htmlNever
+    Internal.Views a divider attributeNever htmlNever
+    -> DomFunctions attribute attributeNever html htmlNever msg
+    -> CustomViewConfig a
     -> Instance a msg
     -> List (Entry a divider)
     -> Listbox
     -> List a
     -> html
-customView dom (CustomViewConfig config) =
-    Internal.view True dom config
+customView views dom (CustomViewConfig config) =
+    Internal.view True dom views config
 
 
 {-| This record holds all the DOM functions needed to render a listbox. It is
@@ -889,8 +894,8 @@ type alias DomFunctions attribute attributeNever html htmlNever msg =
 
 
 {-| -}
-type CustomViewConfig a divider attributeNever htmlNever
-    = CustomViewConfig (Internal.ViewConfig a divider attributeNever htmlNever)
+type CustomViewConfig a
+    = CustomViewConfig (Internal.ViewConfig a)
 
 
 {-| A replacement for `viewConfig` when you are using your own `customView`
@@ -898,9 +903,10 @@ function.
 -}
 customViewConfig :
     { uniqueId : a -> String
-    , views : CustomViews a divider attributeNever htmlNever
+    , focusable : Bool
+    , markActiveDescendant : Bool
     }
-    -> CustomViewConfig a divider attributeNever htmlNever
+    -> CustomViewConfig a
 customViewConfig =
     CustomViewConfig
 
@@ -937,7 +943,7 @@ type alias CustomViews a divider attributeNever htmlNever =
 function. Take a look at its documentation for a description of each field.
 -}
 customFocusedEntryId :
-    CustomViewConfig a divider htmlNever attributeNever
+    CustomViewConfig a
     -> Instance a msg
     -> List (Entry a divider)
     -> Listbox

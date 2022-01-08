@@ -579,21 +579,8 @@ customView dom config instance allEntries (Dropdown data) maybeSelection =
         listboxConfig =
             Listbox.customViewConfig
                 { uniqueId = uniqueId
-                , views =
-                    { ul =
-                        if data.open then
-                            dom.style "position" "absolute" :: views.ul
-
-                        else
-                            dom.style "display" "none"
-                                :: dom.style "position" "absolute"
-                                :: views.ul
-                    , liOption = views.liOption
-                    , liDivider = views.liDivider
-                    , empty = dom.text ""
-                    , focusable = True
-                    , markActiveDescendant = True
-                    }
+                , focusable = True
+                , markActiveDescendant = True
                 }
     in
     dom.div
@@ -657,6 +644,18 @@ customView dom config instance allEntries (Dropdown data) maybeSelection =
                 , preventDefaultOn = dom.preventDefaultOn
                 , attributeMap = dom.attributeMap
                 , htmlMap = dom.htmlMap
+                }
+                { ul =
+                    if data.open then
+                        dom.style "position" "absolute" :: views.ul
+
+                    else
+                        dom.style "display" "none"
+                            :: dom.style "position" "absolute"
+                            :: views.ul
+                , liOption = views.liOption
+                , liDivider = views.liDivider
+                , empty = dom.text ""
                 }
                 listboxConfig
                 { id = printListboxId instance.id
