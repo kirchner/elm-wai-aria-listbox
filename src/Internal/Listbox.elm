@@ -2,7 +2,6 @@ module Internal.Listbox exposing
     ( Behaviour
     , DomFunctions
     , Effect(..)
-    , Entry(..)
     , EntryDomData
     , Focus(..)
     , Instance
@@ -103,24 +102,15 @@ init =
 
 
 
----- ENTRY
-
-
-type Entry a divider
-    = Option a
-    | Divider divider
-
-
-
 ---- EXTERNAL STATE MANIPULATION
 
 
-focusedEntry : UpdateConfig a -> List (Entry a divider) -> Listbox -> Maybe a
+focusedEntry : UpdateConfig a -> List a -> Listbox -> Maybe a
 focusedEntry { uniqueId } allEntries { focus } =
     Maybe.andThen (find uniqueId allEntries) (currentFocus focus)
 
 
-hoveredEntry : UpdateConfig a -> List (Entry a divider) -> Listbox -> Maybe a
+hoveredEntry : UpdateConfig a -> List a -> Listbox -> Maybe a
 hoveredEntry { uniqueId } allEntries { hover } =
     Maybe.andThen (find uniqueId allEntries) hover
 
@@ -141,7 +131,7 @@ focusEntry { uniqueId, behaviour } a listbox selection =
 
 focusNextOrFirstEntry :
     UpdateConfig a
-    -> List (Entry a divider)
+    -> List a
     -> Listbox
     -> List a
     -> ( Listbox, List a )
@@ -153,7 +143,7 @@ focusNextOrFirstEntry config allEntries listbox selection =
         maybeA =
             case currentFocus listbox.focus of
                 Nothing ->
-                    firstEntry allEntries
+                    List.head allEntries
 
                 Just hash ->
                     case findNext uniqueId allEntries hash of
@@ -192,7 +182,7 @@ focusNextOrFirstEntry config allEntries listbox selection =
 
 focusPreviousOrFirstEntry :
     UpdateConfig a
-    -> List (Entry a divider)
+    -> List a
     -> Listbox
     -> List a
     -> ( Listbox, List a )
@@ -204,7 +194,7 @@ focusPreviousOrFirstEntry config allEntries listbox selection =
         maybeA =
             case currentFocus listbox.focus of
                 Nothing ->
-                    firstEntry allEntries
+                    List.head allEntries
 
                 Just hash ->
                     case findPrevious uniqueId allEntries hash of
@@ -265,7 +255,7 @@ type alias ViewConfig a =
     }
 
 
-type alias Views a divider attributeNever htmlNever =
+type alias Views a attributeNever htmlNever =
     { ul : DomAttributes attributeNever
     , liOption :
         { selected : Bool
@@ -275,7 +265,6 @@ type alias Views a divider attributeNever htmlNever =
         }
         -> a
         -> DomDetails attributeNever htmlNever
-    , liDivider : divider -> DomDetails attributeNever htmlNever
     , empty : htmlNever
     }
 
@@ -342,10 +331,10 @@ type alias Instance a msg =
 view :
     Bool
     -> DomFunctions attribute attributeNever html htmlNever msg
-    -> Views a divider attributeNever htmlNever
+    -> Views a attributeNever htmlNever
     -> ViewConfig a
     -> Instance a msg
-    -> List (Entry a divider)
+    -> List a
     -> Listbox
     -> List a
     -> html
@@ -358,43 +347,29 @@ view multiSelectable dom views config instance allEntries listbox selection =
             config
 
         viewEntryHelp entry =
-            case entry of
-                Option option ->
-                    let
-                        maybeHash =
-                            Just (uniqueId option)
+            let
+                maybeHash =
+                    Just (uniqueId entry)
 
-                        focused =
-                            currentFocus listbox.focus == maybeHash
+                focused =
+                    currentFocus listbox.focus == maybeHash
 
-                        hovered =
-                            listbox.hover == maybeHash
+                hovered =
+                    listbox.hover == maybeHash
 
-                        selected =
-                            List.any ((==) option) selection
-                    in
-                    viewEntry dom
-                        views
-                        multiSelectable
-                        focused
-                        hovered
-                        selected
-                        config
-                        instance
-                        listbox.query
-                        entry
-
-                Divider _ ->
-                    viewEntry dom
-                        views
-                        multiSelectable
-                        False
-                        False
-                        False
-                        config
-                        instance
-                        listbox.query
-                        entry
+                selected =
+                    List.any ((==) entry) selection
+            in
+            viewEntry dom
+                views
+                multiSelectable
+                focused
+                hovered
+                selected
+                config
+                instance
+                listbox.query
+                entry
 
         addAriaLabelledBy attrs =
             case label of
@@ -450,7 +425,7 @@ view multiSelectable dom views config instance allEntries listbox selection =
 
 viewEntry :
     DomFunctions attribute attributeNever html htmlNever msg
-    -> Views a divider attributeNever htmlNever
+    -> Views a attributeNever htmlNever
     -> Bool
     -> Bool
     -> Bool
@@ -458,7 +433,7 @@ viewEntry :
     -> ViewConfig a
     -> Instance a msg
     -> Query
-    -> Entry a divider
+    -> a
     -> html
 viewEntry dom views multiSelectable focused hovered selected config instance query entry =
     let
@@ -475,52 +450,40 @@ viewEntry dom views multiSelectable focused hovered selected config instance que
 
                 Query _ _ text ->
                     Just text
+
+        hash =
+            uniqueId entry
+
+        { attributes, children } =
+            views.liOption
+                { selected = selected
+                , focused = focused
+                , hovered = hovered
+                , maybeQuery = maybeQuery
+                }
+                entry
+
+        addWidgetSelected attrs =
+            if multiSelectable then
+                dom.attribute "aria-selected" (stringFromBool selected) :: attrs
+
+            else if selected then
+                dom.attribute "aria-selected" "true" :: attrs
+
+            else
+                attrs
     in
-    case entry of
-        Option option ->
-            let
-                hash =
-                    uniqueId option
-
-                { attributes, children } =
-                    views.liOption
-                        { selected = selected
-                        , focused = focused
-                        , hovered = hovered
-                        , maybeQuery = maybeQuery
-                        }
-                        option
-
-                addWidgetSelected attrs =
-                    if multiSelectable then
-                        dom.attribute "aria-selected" (stringFromBool selected) :: attrs
-
-                    else if selected then
-                        dom.attribute "aria-selected" "true" :: attrs
-
-                    else
-                        attrs
-            in
-            dom.li
-                ([ dom.property "id" (Encode.string (printEntryId id hash))
-                 , dom.attribute "role" "option"
-                 , dom.on "mouseenter" (Decode.succeed (lift (EntryMouseEntered hash)))
-                 , dom.on "ouseleave" (Decode.succeed (lift EntryMouseLeft))
-                 , dom.on "click" (Decode.succeed (lift (EntryClicked option)))
-                 ]
-                    |> addWidgetSelected
-                    |> appendAttributes (dom.attributeMap (lift NoOp)) attributes
-                )
-                (List.map (dom.htmlMap (lift NoOp)) children)
-
-        Divider d ->
-            let
-                { attributes, children } =
-                    views.liDivider d
-            in
-            dom.li
-                (appendAttributes (dom.attributeMap (lift NoOp)) attributes [])
-                (List.map (dom.htmlMap (lift NoOp)) children)
+    dom.li
+        ([ dom.property "id" (Encode.string (printEntryId id hash))
+         , dom.attribute "role" "option"
+         , dom.on "mouseenter" (Decode.succeed (lift (EntryMouseEntered hash)))
+         , dom.on "ouseleave" (Decode.succeed (lift EntryMouseLeft))
+         , dom.on "click" (Decode.succeed (lift (EntryClicked entry)))
+         ]
+            |> addWidgetSelected
+            |> appendAttributes (dom.attributeMap (lift NoOp)) attributes
+        )
+        (List.map (dom.htmlMap (lift NoOp)) children)
 
 
 listKeyPress : Bool -> String -> KeyInfo -> Decoder (Msg a)
@@ -644,7 +607,7 @@ preventDefaultOnKeyDown preventDefaultOn { id, lift } keyDownDecoder =
 focusedEntryId :
     ViewConfig a
     -> Instance a msg
-    -> List (Entry a divider)
+    -> List a
     -> Listbox
     -> Maybe String
 focusedEntryId { uniqueId } { id } entries { focus } =
@@ -670,7 +633,7 @@ setAriaActivedescendant :
     -> String
     -> (a -> String)
     -> Maybe String
-    -> List (Entry a divider)
+    -> List a
     -> List attribute
     -> List attribute
 setAriaActivedescendant attribute id uniqueId focus entries attrs =
@@ -768,7 +731,7 @@ type alias EntryDomData =
 
 update :
     UpdateConfig a
-    -> List (Entry a divider)
+    -> List a
     -> Msg a
     -> Listbox
     -> List a
@@ -825,7 +788,7 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
                         |> Maybe.andThen (find uniqueId allEntries)
                         |> or (List.head selection)
                         |> Maybe.andThen (uniqueId >> find uniqueId allEntries)
-                        |> or (firstEntry allEntries)
+                        |> or (List.head allEntries)
             in
             case maybeA of
                 Nothing ->
@@ -1153,7 +1116,7 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
                         |> select a listA
 
         ListHomeDown id ->
-            case firstEntry allEntries of
+            case List.head allEntries of
                 Nothing ->
                     unchanged
 
@@ -1166,7 +1129,7 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
                         |> withEffect (ScrollListToTop id)
 
         ListControlShiftHomeDown id ->
-            case Maybe.map uniqueId (firstEntry allEntries) of
+            case Maybe.map uniqueId (List.head allEntries) of
                 Nothing ->
                     unchanged
 
@@ -1244,28 +1207,8 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
             let
                 allEntriesSet =
                     allEntries
-                        |> List.filterMap
-                            (\e ->
-                                case e of
-                                    Divider _ ->
-                                        Nothing
-
-                                    Option a ->
-                                        Just (uniqueId a)
-                            )
+                        |> List.map uniqueId
                         |> Set.fromList
-
-                allEntriesList =
-                    allEntries
-                        |> List.filterMap
-                            (\e ->
-                                case e of
-                                    Divider _ ->
-                                        Nothing
-
-                                    Option a ->
-                                        Just a
-                            )
 
                 selectionSet =
                     selection
@@ -1278,7 +1221,7 @@ update ({ uniqueId, behaviour } as config) allEntries msg listbox selection =
 
             else
                 unchanged
-                    |> withSelection allEntriesList
+                    |> withSelection allEntries
 
         -- QUERY
         ListKeyDown id key ->
@@ -1525,13 +1468,13 @@ printEntryId id entryId =
 --- FIND
 
 
-indexOf : (a -> String) -> List (Entry a divider) -> String -> Maybe Int
+indexOf : (a -> String) -> List a -> String -> Maybe Int
 indexOf uniqueId entries selectedId =
     findHelp 0 uniqueId entries selectedId
         |> Maybe.map Tuple.first
 
 
-find : (a -> String) -> List (Entry a divider) -> String -> Maybe a
+find : (a -> String) -> List a -> String -> Maybe a
 find uniqueId entries selectedId =
     findHelp 0 uniqueId entries selectedId
         |> Maybe.map Tuple.second
@@ -1540,7 +1483,7 @@ find uniqueId entries selectedId =
 findHelp :
     Int
     -> (a -> String)
-    -> List (Entry a divider)
+    -> List a
     -> String
     -> Maybe ( Int, a )
 findHelp index uniqueId entries selectedId =
@@ -1548,10 +1491,7 @@ findHelp index uniqueId entries selectedId =
         [] ->
             Nothing
 
-        (Divider _) :: rest ->
-            findHelp (index + 1) uniqueId rest selectedId
-
-        (Option entry) :: rest ->
+        entry :: rest ->
             if uniqueId entry == selectedId then
                 Just ( index, entry )
 
@@ -1563,7 +1503,7 @@ findWith :
     (String -> a -> Bool)
     -> (a -> String)
     -> String
-    -> List (Entry a divider)
+    -> List a
     -> String
     -> Maybe String
 findWith matchesQuery uniqueId query entries id =
@@ -1571,10 +1511,7 @@ findWith matchesQuery uniqueId query entries id =
         [] ->
             Nothing
 
-        (Divider _) :: rest ->
-            findWith matchesQuery uniqueId query rest id
-
-        (Option a) :: rest ->
+        a :: rest ->
             if uniqueId a == id then
                 if matchesQuery query a then
                     Just id
@@ -1591,17 +1528,14 @@ proceedWith :
     -> (a -> String)
     -> String
     -> String
-    -> List (Entry a divider)
+    -> List a
     -> Maybe String
 proceedWith matchesQuery uniqueId id query entries =
     case entries of
         [] ->
             Just id
 
-        (Divider _) :: rest ->
-            proceedWith matchesQuery uniqueId id query rest
-
-        (Option a) :: rest ->
+        a :: rest ->
             if matchesQuery query a then
                 Just (uniqueId a)
 
@@ -1609,22 +1543,9 @@ proceedWith matchesQuery uniqueId id query entries =
                 proceedWith matchesQuery uniqueId id query rest
 
 
-lastEntry : List (Entry a divider) -> Maybe a
+lastEntry : List a -> Maybe a
 lastEntry entries =
-    firstEntry (List.reverse entries)
-
-
-firstEntry : List (Entry a divider) -> Maybe a
-firstEntry entries =
-    case entries of
-        [] ->
-            Nothing
-
-        (Divider _) :: rest ->
-            firstEntry rest
-
-        (Option a) :: _ ->
-            Just a
+    List.head (List.reverse entries)
 
 
 
@@ -1638,7 +1559,7 @@ type Previous a
 
 findPrevious :
     (a -> String)
-    -> List (Entry a divider)
+    -> List a
     -> String
     -> Maybe (Previous a)
 findPrevious uniqueId entries currentId =
@@ -1646,10 +1567,7 @@ findPrevious uniqueId entries currentId =
         [] ->
             Nothing
 
-        (Divider _) :: rest ->
-            findPrevious uniqueId rest currentId
-
-        (Option first) :: rest ->
+        first :: rest ->
             if uniqueId first == currentId then
                 entries
                     |> lastEntry
@@ -1662,7 +1580,7 @@ findPrevious uniqueId entries currentId =
 findPreviousHelp :
     a
     -> (a -> String)
-    -> List (Entry a divider)
+    -> List a
     -> String
     -> Maybe (Previous a)
 findPreviousHelp previous uniqueId entries currentId =
@@ -1670,10 +1588,7 @@ findPreviousHelp previous uniqueId entries currentId =
         [] ->
             Nothing
 
-        (Divider _) :: rest ->
-            findPreviousHelp previous uniqueId rest currentId
-
-        (Option first) :: rest ->
+        first :: rest ->
             if uniqueId first == currentId then
                 Just (Previous previous)
 
@@ -1690,18 +1605,15 @@ type Next a
     | First a
 
 
-findNext : (a -> String) -> List (Entry a divider) -> String -> Maybe (Next a)
+findNext : (a -> String) -> List a -> String -> Maybe (Next a)
 findNext uniqueId entries currentId =
     case entries of
         [] ->
             Nothing
 
-        (Divider _) :: rest ->
-            findNext uniqueId rest currentId
-
-        (Option first) :: rest ->
+        first :: rest ->
             if uniqueId first == currentId then
-                firstEntry rest
+                List.head rest
                     |> Maybe.map Next
 
             else
@@ -1711,7 +1623,7 @@ findNext uniqueId entries currentId =
 findNextHelp :
     a
     -> (a -> String)
-    -> List (Entry a divider)
+    -> List a
     -> String
     -> Next a
 findNextHelp first uniqueId entries currentId =
@@ -1719,12 +1631,9 @@ findNextHelp first uniqueId entries currentId =
         [] ->
             First first
 
-        (Divider _) :: rest ->
-            findNextHelp first uniqueId rest currentId
-
-        (Option a) :: rest ->
+        a :: rest ->
             if uniqueId a == currentId then
-                firstEntry rest
+                List.head rest
                     |> Maybe.map Next
                     |> Maybe.withDefault (First first)
 
@@ -1736,16 +1645,13 @@ findNextHelp first uniqueId entries currentId =
 ---- RANGE
 
 
-range : (a -> String) -> List (Entry a divider) -> String -> String -> List a
+range : (a -> String) -> List a -> String -> String -> List a
 range uniqueId entries end start =
     case entries of
         [] ->
             []
 
-        (Divider _) :: rest ->
-            range uniqueId rest start end
-
-        (Option a) :: rest ->
+        a :: rest ->
             if uniqueId a == start then
                 rangeHelp uniqueId [ a ] end rest
 
@@ -1756,16 +1662,13 @@ range uniqueId entries end start =
                 range uniqueId rest start end
 
 
-rangeHelp : (a -> String) -> List a -> String -> List (Entry a divider) -> List a
+rangeHelp : (a -> String) -> List a -> String -> List a -> List a
 rangeHelp uniqueId collected end entries =
     case entries of
         [] ->
             []
 
-        (Divider _) :: rest ->
-            rangeHelp uniqueId collected end rest
-
-        (Option a) :: rest ->
+        a :: rest ->
             if uniqueId a == end then
                 a :: collected
 

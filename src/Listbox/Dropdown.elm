@@ -73,8 +73,7 @@ import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
 import Listbox as Listbox
     exposing
-        ( Entry
-        , HtmlAttributes
+        ( HtmlAttributes
         , HtmlDetails
         , Listbox
         , TypeAhead
@@ -115,10 +114,10 @@ init =
 
 
 {-| -}
-type ViewConfig a divider
+type ViewConfig a
     = ViewConfig
         { uniqueId : a -> String
-        , views : Views a divider
+        , views : Views a
         }
 
 
@@ -133,9 +132,9 @@ You usually do **not** want to store this inside your model.
 -}
 viewConfig :
     { uniqueId : a -> String
-    , views : Views a divider
+    , views : Views a
     }
-    -> ViewConfig a divider
+    -> ViewConfig a
 viewConfig =
     ViewConfig
 
@@ -161,9 +160,6 @@ the following fields:
     `mouseFocus`). If the user typed in a query, you get this via the
     `maybeQuery` field.
 
-  - **liDivider**: This lets you style the divider list entries. It gets the
-    actual `divider` entry and returns `HtmlDetails`.
-
 The DOM structure of a dropdown will be something like this:
 
     listbox =
@@ -174,9 +170,6 @@ The DOM structure of a dropdown will be something like this:
             , Html.ul
                 [ ... ] -- ul attributes
                 [ Html.li
-                    [ ... ] -- liDivider attributes
-                    [ ... ] -- liDivider children
-                , Html.li
                     [ ... ] -- liOption attributes
                     [ ... ] -- liOption children
                 , ...
@@ -219,11 +212,10 @@ like this:
                 , children =
                     [ Html.text option ]
                 }
-        , liDivider = noDivider
         }
 
 -}
-type alias Views a divider =
+type alias Views a =
     { container : HtmlAttributes
     , button :
         { maybeSelection : Maybe a
@@ -239,7 +231,6 @@ type alias Views a divider =
         }
         -> a
         -> HtmlDetails
-    , liDivider : divider -> HtmlDetails
     }
 
 
@@ -377,9 +368,9 @@ a dropdown. You have to provide a `ViewConfig` for the styling and an
 
 -}
 view :
-    ViewConfig a divider
+    ViewConfig a
     -> Instance msg a
-    -> List (Entry a divider)
+    -> List a
     -> Dropdown
     -> Maybe a
     -> Html msg
@@ -390,7 +381,6 @@ view (ViewConfig { uniqueId, views }) =
             , button = views.button
             , ul = views.ul
             , liOption = views.liOption
-            , liDivider = views.liDivider
             }
         )
 
@@ -422,8 +412,8 @@ htmlFunctions =
 
 
 {-| -}
-type CustomViewConfig a divider attributeNever htmlNever
-    = CustomViewConfig (a -> String) (CustomViews a divider attributeNever htmlNever)
+type CustomViewConfig a attributeNever htmlNever
+    = CustomViewConfig (a -> String) (CustomViews a attributeNever htmlNever)
 
 
 {-| A replacement for `Views` when you are using your own `customView`
@@ -431,8 +421,8 @@ function. Take a look at its documentation for a description of each field.
 -}
 customViewConfig :
     (a -> String)
-    -> CustomViews a divider attributeNever htmlNever
-    -> CustomViewConfig a divider attributeNever htmlNever
+    -> CustomViews a attributeNever htmlNever
+    -> CustomViewConfig a attributeNever htmlNever
 customViewConfig =
     CustomViewConfig
 
@@ -440,7 +430,7 @@ customViewConfig =
 {-| A replacement for `Views` when you are using your own `customView`
 function. Take a look at its documentation for a description of each field.
 -}
-type alias CustomViews a divider attributeNever htmlNever =
+type alias CustomViews a attributeNever htmlNever =
     { container : List attributeNever
     , button :
         { maybeSelection : Maybe a
@@ -458,12 +448,6 @@ type alias CustomViews a divider attributeNever htmlNever =
         , maybeQuery : Maybe String
         }
         -> a
-        ->
-            { attributes : List attributeNever
-            , children : List htmlNever
-            }
-    , liDivider :
-        divider
         ->
             { attributes : List attributeNever
             , children : List htmlNever
@@ -559,9 +543,9 @@ providing some `DomFunctions`.
 -}
 customView :
     DomFunctions attribute attributeNever html htmlNever msg
-    -> CustomViewConfig a divider attributeNever htmlNever
+    -> CustomViewConfig a attributeNever htmlNever
     -> Instance msg a
-    -> List (Entry a divider)
+    -> List a
     -> Dropdown
     -> Maybe a
     -> html
@@ -654,7 +638,6 @@ customView dom config instance allEntries (Dropdown data) maybeSelection =
                             :: dom.style "position" "absolute"
                             :: views.ul
                 , liOption = views.liOption
-                , liDivider = views.liDivider
                 , empty = dom.text ""
                 }
                 listboxConfig
@@ -821,7 +804,7 @@ example, loaded via an HTTP request.)
 -}
 update :
     UpdateConfig a
-    -> List (Entry a divider)
+    -> List a
     -> Msg a
     -> Dropdown
     -> Maybe a

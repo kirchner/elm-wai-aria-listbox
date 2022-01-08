@@ -87,7 +87,7 @@ import Internal.KeyInfo as KeyInfo
 import Internal.Label exposing (Label(..))
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
-import Listbox exposing (Entry, Listbox)
+import Listbox exposing (Listbox)
 
 
 {-| Tracks the keyboard and mouse focus in the pop-up. The value of the textbox
@@ -176,9 +176,9 @@ this combobox. For example:
 
 -}
 view :
-    ViewConfig a divider
+    ViewConfig a
     -> Instance a msg
-    -> List (Entry a divider)
+    -> List a
     -> Combobox a
     -> String
     -> Html msg
@@ -283,7 +283,7 @@ example, loaded via an HTTP request.)
 -}
 update :
     UpdateConfig a
-    -> List (Entry a divider)
+    -> List a
     -> Msg a
     -> Combobox a
     -> String
@@ -482,12 +482,12 @@ subscriptions (Combobox data) =
 
 
 {-| -}
-type ViewConfig a divider
+type ViewConfig a
     = ViewConfig
         { uniqueId : a -> String
         , role : Role
         , visibility : Visibility
-        , views : Views a divider
+        , views : Views a
         }
 
 
@@ -506,9 +506,9 @@ viewConfig :
     { uniqueId : a -> String
     , role : Role
     , visibility : Visibility
-    , views : Views a divider
+    , views : Views a
     }
-    -> ViewConfig a divider
+    -> ViewConfig a
 viewConfig =
     ViewConfig
 
@@ -563,9 +563,6 @@ with the following fields:
     this option is currently `selected`, `focused` or `hovered`. If the user
     typed in a query, you get this via the `maybeQuery` field.
 
-  - **liDivider**: This lets you style the divider list entries. It gets the
-    actual `divider` entry and returns `HtmlDetails`.
-
 The DOM structure of a combobox with visible pop-up will be something like
 this:
 
@@ -578,9 +575,6 @@ this:
             , Html.ul
                 [ ... ] -- ul attributes
                 [ Html.li
-                    [ ... ] -- liDivider attributes
-                    [ ... ] -- liDivider children
-                , Html.li
                     [ ... ] -- liOption attributes
                     [ ... ] -- liOption children
                 , ...
@@ -625,11 +619,10 @@ like this:
                 , children =
                     [ Html.text option ]
                 }
-        , liDivider = noDivider
         }
 
 -}
-type alias Views a divider =
+type alias Views a =
     { container : HtmlAttributes
     , input : HtmlAttributes
     , ul : HtmlAttributes
@@ -641,7 +634,6 @@ type alias Views a divider =
         }
         -> a
         -> HtmlDetails
-    , liDivider : divider -> HtmlDetails
     }
 
 
@@ -803,12 +795,12 @@ type alias DomFunctions attribute attributeNever html htmlNever msg =
 
 
 {-| -}
-type CustomViewConfig a divider attributeNever htmlNever
+type CustomViewConfig a attributeNever htmlNever
     = CustomViewConfig
         { uniqueId : a -> String
         , role : Role
         , visibility : CustomVisibility htmlNever
-        , views : CustomViews a divider attributeNever htmlNever
+        , views : CustomViews a attributeNever htmlNever
         }
 
 
@@ -819,16 +811,16 @@ customViewConfig :
     { uniqueId : a -> String
     , role : Role
     , visibility : CustomVisibility htmlNever
-    , views : CustomViews a divider attributeNever htmlNever
+    , views : CustomViews a attributeNever htmlNever
     }
-    -> CustomViewConfig a divider attributeNever htmlNever
+    -> CustomViewConfig a attributeNever htmlNever
 customViewConfig =
     CustomViewConfig
 
 
 viewConfigToCustom :
-    ViewConfig a divider
-    -> CustomViewConfig a divider (Attribute Never) (Html Never)
+    ViewConfig a
+    -> CustomViewConfig a (Attribute Never) (Html Never)
 viewConfigToCustom (ViewConfig config) =
     CustomViewConfig
         { uniqueId = config.uniqueId
@@ -871,7 +863,7 @@ visibilityToCustom visibility =
 {-| A replacement for `Views` when you are using your own `customView`
 function. Take a look at its documentation for a description of each field.
 -}
-type alias CustomViews a divider attributeNever htmlNever =
+type alias CustomViews a attributeNever htmlNever =
     { container : DomAttributes attributeNever
     , input : DomAttributes attributeNever
     , ul : DomAttributes attributeNever
@@ -883,7 +875,6 @@ type alias CustomViews a divider attributeNever htmlNever =
         }
         -> a
         -> DomDetails attributeNever htmlNever
-    , liDivider : divider -> DomDetails attributeNever htmlNever
     }
 
 
@@ -902,9 +893,9 @@ providing some `DomFunctions`.
 -}
 customView :
     DomFunctions attribute attributeNever html htmlNever msg
-    -> CustomViewConfig a divider attributeNever htmlNever
+    -> CustomViewConfig a attributeNever htmlNever
     -> Instance a msg
-    -> List (Entry a divider)
+    -> List a
     -> Combobox a
     -> String
     -> html
@@ -1030,7 +1021,6 @@ customView dom (CustomViewConfig config) instance entries (Combobox data) value 
                             :: dom.style "position" "absolute"
                             :: config.views.ul
                 , liOption = config.views.liOption
-                , liDivider = config.views.liDivider
                 , empty = dom.text ""
                 }
                 listboxViewConfig
@@ -1178,7 +1168,7 @@ customView dom (CustomViewConfig config) instance entries (Combobox data) value 
 open :
     CustomVisibility htmlNever
     -> ComboboxData a
-    -> List (Entry a divider)
+    -> List a
     -> String
     -> Bool
 open visibility data entries value =

@@ -1,6 +1,5 @@
 module Listbox exposing
     ( view, Instance, Label, labelledBy, label, noLabel
-    , Entry, option, divider
     , Listbox, init
     , update, Msg, subscriptions
     , UpdateConfig, updateConfig, Behaviour
@@ -34,11 +33,6 @@ interactions this widget offers.
 # View
 
 @docs view, Instance, Label, labelledBy, label, noLabel
-
-
-# Entry
-
-@docs Entry, option, divider
 
 
 # State
@@ -172,28 +166,6 @@ init =
     Internal.init
 
 
-{-| When updating or viewing a listbox you have to provide a list of entries.
-These can be selectable options or non-selectable dividers. You can construct
-these using `option` and `divider`.
--}
-type alias Entry a divider =
-    Internal.Entry a divider
-
-
-{-| Create a selectable option.
--}
-option : a -> Entry a divider
-option =
-    Internal.Option
-
-
-{-| Create a non-selectable divider.
--}
-divider : divider -> Entry a divider
-divider =
-    Internal.Divider
-
-
 
 ---- EXTERNAL STATE MANIPULATION
 
@@ -210,7 +182,7 @@ focus { id } =
 -}
 focusedEntry :
     UpdateConfig a
-    -> List (Entry a divider)
+    -> List a
     -> Listbox
     -> Maybe a
 focusedEntry (UpdateConfig config) =
@@ -221,7 +193,7 @@ focusedEntry (UpdateConfig config) =
 -}
 hoveredEntry :
     UpdateConfig a
-    -> List (Entry a divider)
+    -> List a
     -> Listbox
     -> Maybe a
 hoveredEntry (UpdateConfig config) =
@@ -253,7 +225,7 @@ want to apply `scrollToFocus` afterwards.
 -}
 focusNextOrFirstEntry :
     UpdateConfig a
-    -> List (Entry a divider)
+    -> List a
     -> Listbox
     -> List a
     -> ( Listbox, List a )
@@ -270,7 +242,7 @@ want to apply `scrollToFocus` afterwards.
 -}
 focusPreviousOrFirstEntry :
     UpdateConfig a
-    -> List (Entry a divider)
+    -> List a
     -> Listbox
     -> List a
     -> ( Listbox, List a )
@@ -378,7 +350,7 @@ like this:
         }
 
 -}
-type alias Views a divider =
+type alias Views a =
     { ul : HtmlAttributes
     , liOption :
         { selected : Bool
@@ -388,7 +360,6 @@ type alias Views a divider =
         }
         -> a
         -> HtmlDetails
-    , liDivider : divider -> HtmlDetails
     , empty : Html Never
     , focusable : Bool
     , markActiveDescendant : Bool
@@ -627,10 +598,10 @@ to uniquely identify this listbox. For example:
 
 -}
 view :
-    Internal.Views a divider (Attribute Never) (Html Never)
+    Internal.Views a (Attribute Never) (Html Never)
     -> ViewConfig a divider
     -> Instance a msg
-    -> List (Entry a divider)
+    -> List a
     -> Listbox
     -> List a
     -> Html msg
@@ -685,7 +656,7 @@ preventDefaultOnKeyDown =
 focusedEntryId :
     ViewConfig a divider
     -> Instance a msg
-    -> List (Entry a divider)
+    -> List a
     -> Listbox
     -> Maybe String
 focusedEntryId (ViewConfig config) =
@@ -702,10 +673,10 @@ of this function and the one of `view` is that the last argument is a `Maybe a`
 instead of a `List a`.
 -}
 viewUnique :
-    Internal.Views a divider (Attribute Never) (Html Never)
+    Internal.Views a (Attribute Never) (Html Never)
     -> ViewConfig a divider
     -> Instance a msg
-    -> List (Entry a divider)
+    -> List a
     -> Listbox
     -> Maybe a
     -> Html msg
@@ -720,10 +691,10 @@ a `Maybe a` instead of a `List a`.
 -}
 customViewUnique :
     DomFunctions attribute attributeNever html htmlNever msg
-    -> Internal.Views a divider attributeNever htmlNever
+    -> Internal.Views a attributeNever htmlNever
     -> CustomViewConfig a
     -> Instance a msg
-    -> List (Entry a divider)
+    -> List a
     -> Listbox
     -> Maybe a
     -> html
@@ -738,7 +709,7 @@ argument is a `Maybe a` instead of a `List a`.
 -}
 updateUnique :
     UpdateConfig a
-    -> List (Entry a divider)
+    -> List a
     -> Msg a
     -> Listbox
     -> Maybe a
@@ -772,7 +743,7 @@ want to apply `scrollToFocus` afterwards.
 -}
 focusNextOrFirstEntryUnique :
     UpdateConfig a
-    -> List (Entry a divider)
+    -> List a
     -> Listbox
     -> Maybe a
     -> ( Listbox, Maybe a )
@@ -789,7 +760,7 @@ want to apply `scrollToFocus` afterwards.
 -}
 focusPreviousOrFirstEntryUnique :
     UpdateConfig a
-    -> List (Entry a divider)
+    -> List a
     -> Listbox
     -> Maybe a
     -> ( Listbox, Maybe a )
@@ -834,11 +805,11 @@ listToMaybe listA =
 providing some `DomFunctions`.
 -}
 customView :
-    Internal.Views a divider attributeNever htmlNever
+    Internal.Views a attributeNever htmlNever
     -> DomFunctions attribute attributeNever html htmlNever msg
     -> CustomViewConfig a
     -> Instance a msg
-    -> List (Entry a divider)
+    -> List a
     -> Listbox
     -> List a
     -> html
@@ -914,7 +885,7 @@ customViewConfig =
 {-| A replacement for `Views` when you are using your own `customView`
 function. Take a look at its documentation for a description of each field.
 -}
-type alias CustomViews a divider attributeNever htmlNever =
+type alias CustomViews a attributeNever htmlNever =
     { ul : List attributeNever
     , liOption :
         { selected : Bool
@@ -923,12 +894,6 @@ type alias CustomViews a divider attributeNever htmlNever =
         , maybeQuery : Maybe String
         }
         -> a
-        ->
-            { attributes : List attributeNever
-            , children : List htmlNever
-            }
-    , liDivider :
-        divider
         ->
             { attributes : List attributeNever
             , children : List htmlNever
@@ -945,7 +910,7 @@ function. Take a look at its documentation for a description of each field.
 customFocusedEntryId :
     CustomViewConfig a
     -> Instance a msg
-    -> List (Entry a divider)
+    -> List a
     -> Listbox
     -> Maybe String
 customFocusedEntryId (CustomViewConfig config) =
@@ -1003,7 +968,7 @@ example, loaded via an HTTP request.)
 -}
 update :
     UpdateConfig a
-    -> List (Entry a divider)
+    -> List a
     -> Msg a
     -> Listbox
     -> List a
