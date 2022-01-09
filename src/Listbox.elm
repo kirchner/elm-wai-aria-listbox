@@ -1,11 +1,11 @@
 module Listbox exposing
     ( view, Instance, Label, labelledBy, label, noLabel
-    , Views, html
-    , custom, ListboxAttrs, OptionAttrs
     , Listbox, init
     , update, Msg, subscriptions
     , Behaviour
     , TypeAhead, noTypeAhead, simpleTypeAhead, typeAhead
+    , Views, html
+    , custom, ListboxAttrs, OptionAttrs
     , viewUnique, updateUnique
     , focusEntryUnique, focusNextOrFirstEntryUnique, focusPreviousOrFirstEntryUnique
     , focusedEntry, focusedEntryId, hoveredEntry
@@ -30,6 +30,18 @@ interactions this widget offers.
 @docs view, Instance, Label, labelledBy, label, noLabel
 
 
+# State management
+
+@docs Listbox, init
+@docs update, Msg, subscriptions
+@docs Behaviour
+
+
+## Type-ahead
+
+@docs TypeAhead, noTypeAhead, simpleTypeAhead, typeAhead
+
+
 # View customization
 
 @docs Views, html
@@ -38,22 +50,6 @@ interactions this widget offers.
 ## Advanced customization
 
 @docs custom, ListboxAttrs, OptionAttrs
-
-
-# State
-
-@docs Listbox, init
-
-
-# Update
-
-@docs update, Msg, subscriptions
-@docs Behaviour
-
-
-## Type-ahead
-
-@docs TypeAhead, noTypeAhead, simpleTypeAhead, typeAhead
 
 
 # Unique selection
@@ -885,7 +881,12 @@ at the implementation of `html` for a starting point. The `examples/` folder of
 the package repository contains an implementation for `mdgriffith/elm-ui`.
 -}
 custom :
-    { listbox : ListboxAttrs msg -> { options : List node } -> node
+    { listbox :
+        ListboxAttrs msg
+        ->
+            { options : List node
+            }
+        -> node
     , option :
         OptionAttrs msg
         ->
