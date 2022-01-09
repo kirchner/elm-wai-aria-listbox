@@ -143,15 +143,18 @@ import Time exposing (Posix)
 list of entries and the currently selected option(s) live in your own model.
 -}
 type Listbox
-    = Listbox
-        { preventScroll : Bool
-        , query : Query
+    = Listbox Data
 
-        -- FOCUS
-        , focus : Focus
-        , hover : Maybe String
-        , maybeLastSelectedEntry : Maybe String
-        }
+
+type alias Data =
+    { preventScroll : Bool
+    , query : Query
+
+    -- FOCUS
+    , focus : Focus
+    , hover : Maybe String
+    , maybeLastSelectedEntry : Maybe String
+    }
 
 
 type Query
@@ -1393,56 +1396,54 @@ update :
     -> Listbox
     -> List a
     -> ( Listbox, Cmd (Msg a), List a )
-update config entries msg listbox selection =
-    updateHelp config entries msg listbox selection
+update config entries msg (Listbox data) selection =
+    let
+        ( newData, cmd, newSelection ) =
+            updateHelp config entries msg data selection
+    in
+    ( Listbox newData, cmd, newSelection )
 
 
-updateHelp :
-    UpdateConfig a
-    -> List a
-    -> Msg a
-    -> Listbox
-    -> List a
-    -> ( Listbox, Cmd (Msg a), List a )
-updateHelp ((UpdateConfig { uniqueId, behaviour }) as config) allEntries msg (Listbox listbox) selection =
+updateHelp : UpdateConfig a -> List a -> Msg a -> Data -> List a -> ( Data, Cmd (Msg a), List a )
+updateHelp ((UpdateConfig { uniqueId, behaviour }) as config) allEntries msg data selection =
     let
         unchanged =
-            ( Listbox listbox
+            ( data
             , Cmd.none
             , selection
             )
 
-        fromModel (Listbox newListbox) =
-            ( Listbox newListbox
+        fromModel newData =
+            ( newData
             , Cmd.none
             , selection
             )
 
-        withEffect effect ( Listbox newListbox, _, newSelection ) =
-            ( Listbox newListbox, effect, newSelection )
+        withEffect effect ( newData, _, newSelection ) =
+            ( newData, effect, newSelection )
 
-        withSelection newSelection ( Listbox newListbox, effect, _ ) =
-            ( Listbox newListbox, effect, newSelection )
+        withSelection newSelection ( newData, effect, _ ) =
+            ( newData, effect, newSelection )
 
         -- SELECTION
-        select a listA ( Listbox newListbox, effect, newSelection ) =
-            Listbox { newListbox | maybeLastSelectedEntry = Just (uniqueId a) }
+        select a listA ( newData, effect, newSelection ) =
+            { newData | maybeLastSelectedEntry = Just (uniqueId a) }
                 |> fromModel
                 |> withSelection (List.uniqueBy uniqueId (a :: listA ++ newSelection))
 
-        unselect a ( Listbox newListbox, effect, newSelection ) =
-            Listbox newListbox
+        unselect a ( newData, effect, newSelection ) =
+            newData
                 |> fromModel
                 |> withSelection (List.filter (\b -> a /= b) newSelection)
 
-        toggle a ( Listbox newListbox, effect, newSelection ) =
+        toggle a ( newData, effect, newSelection ) =
             if List.member a newSelection then
-                Listbox newListbox
+                newData
                     |> fromModel
                     |> withSelection (List.filter (\b -> a /= b) newSelection)
 
             else
-                Listbox { newListbox | maybeLastSelectedEntry = Just (uniqueId a) }
+                { newData | maybeLastSelectedEntry = Just (uniqueId a) }
                     |> fromModel
                     |> withSelection (List.uniqueBy uniqueId (a :: newSelection))
 
@@ -1450,9 +1451,9 @@ updateHelp ((UpdateConfig { uniqueId, behaviour }) as config) allEntries msg (Li
         initFocus id =
             let
                 maybeA =
-                    listbox.focus
+                    data.focus
                         |> currentFocus
-                        |> or listbox.maybeLastSelectedEntry
+                        |> or data.maybeLastSelectedEntry
                         |> Maybe.andThen (find uniqueId allEntries)
                         |> or (List.head selection)
                         |> Maybe.andThen (uniqueId >> find uniqueId allEntries)
@@ -1460,28 +1461,27 @@ updateHelp ((UpdateConfig { uniqueId, behaviour }) as config) allEntries msg (Li
             in
             case maybeA of
                 Nothing ->
-                    fromModel (Listbox { listbox | query = NoQuery })
+                    fromModel { data | query = NoQuery }
 
                 Just a ->
                     let
                         hash =
                             uniqueId a
 
-                        newListbox =
-                            Listbox
-                                { listbox
-                                    | query = NoQuery
-                                    , focus = Focus hash
-                                }
+                        newData =
+                            { data
+                                | query = NoQuery
+                                , focus = Focus hash
+                            }
                     in
                     if behaviour.selectionFollowsFocus then
-                        newListbox
+                        newData
                             |> fromModel
                             |> withEffect (attemptToScrollToOption behaviour id hash Nothing)
                             |> select a []
 
                     else
-                        newListbox
+                        newData
                             |> fromModel
                             |> withEffect (attemptToScrollToOption behaviour id hash Nothing)
 
@@ -1489,7 +1489,7 @@ updateHelp ((UpdateConfig { uniqueId, behaviour }) as config) allEntries msg (Li
             case findPrevious uniqueId allEntries current of
                 Just (Last a) ->
                     if behaviour.jumpAtEnds then
-                        { listbox
+                        { data
                             | query = NoQuery
                             , focus =
                                 Pending
@@ -1499,33 +1499,32 @@ updateHelp ((UpdateConfig { uniqueId, behaviour }) as config) allEntries msg (Li
                                     , shiftDown = shiftDown
                                     }
                         }
-                            |> Listbox
                             |> fromModel
                             |> withEffect (getViewportOfList id Up a)
 
                     else if behaviour.selectionFollowsFocus then
                         case find uniqueId allEntries current of
                             Nothing ->
-                                fromModel (Listbox { listbox | query = NoQuery })
+                                fromModel { data | query = NoQuery }
 
                             Just currentA ->
                                 if shiftDown then
-                                    fromModel (Listbox { listbox | query = NoQuery })
+                                    fromModel { data | query = NoQuery }
                                         |> toggle currentA
 
                                 else
-                                    fromModel (Listbox { listbox | query = NoQuery })
+                                    fromModel { data | query = NoQuery }
                                         |> withSelection [ currentA ]
 
                     else
-                        fromModel (Listbox { listbox | query = NoQuery })
+                        fromModel { data | query = NoQuery }
 
                 Just (Previous a) ->
                     let
                         hash =
                             uniqueId a
                     in
-                    { listbox
+                    { data
                         | query = NoQuery
                         , focus =
                             Pending
@@ -1535,7 +1534,6 @@ updateHelp ((UpdateConfig { uniqueId, behaviour }) as config) allEntries msg (Li
                                 , shiftDown = shiftDown
                                 }
                     }
-                        |> Listbox
                         |> fromModel
                         |> withEffect (attemptToGetDomInfoOption id hash current a)
 
@@ -1546,7 +1544,7 @@ updateHelp ((UpdateConfig { uniqueId, behaviour }) as config) allEntries msg (Li
             case findNext uniqueId allEntries current of
                 Just (First a) ->
                     if behaviour.jumpAtEnds then
-                        { listbox
+                        { data
                             | query = NoQuery
                             , focus =
                                 Pending
@@ -1556,43 +1554,41 @@ updateHelp ((UpdateConfig { uniqueId, behaviour }) as config) allEntries msg (Li
                                     , shiftDown = shiftDown
                                     }
                         }
-                            |> Listbox
                             |> fromModel
                             |> withEffect (getViewportOfList id Down a)
 
                     else if behaviour.selectionFollowsFocus then
                         case find uniqueId allEntries current of
                             Nothing ->
-                                fromModel (Listbox { listbox | query = NoQuery })
+                                fromModel { data | query = NoQuery }
 
                             Just currentA ->
                                 if shiftDown then
-                                    fromModel (Listbox { listbox | query = NoQuery })
+                                    fromModel { data | query = NoQuery }
                                         |> toggle currentA
 
                                 else
-                                    fromModel (Listbox { listbox | query = NoQuery })
+                                    fromModel { data | query = NoQuery }
                                         |> withSelection [ currentA ]
 
                     else
-                        fromModel (Listbox { listbox | query = NoQuery })
+                        fromModel { data | query = NoQuery }
 
                 Just (Next a) ->
                     let
                         hash =
                             uniqueId a
                     in
-                    Listbox
-                        { listbox
-                            | query = NoQuery
-                            , focus =
-                                Pending
-                                    { id = id
-                                    , current = current
-                                    , pending = hash
-                                    , shiftDown = shiftDown
-                                    }
-                        }
+                    { data
+                        | query = NoQuery
+                        , focus =
+                            Pending
+                                { id = id
+                                , current = current
+                                , pending = hash
+                                , shiftDown = shiftDown
+                                }
+                    }
                         |> fromModel
                         |> withEffect (attemptToGetDomInfoOption id hash current a)
 
@@ -1609,7 +1605,7 @@ updateHelp ((UpdateConfig { uniqueId, behaviour }) as config) allEntries msg (Li
                     unchanged
 
                 Ok entryDomData ->
-                    case listbox.focus of
+                    case data.focus of
                         NoFocus ->
                             unchanged
 
@@ -1618,28 +1614,26 @@ updateHelp ((UpdateConfig { uniqueId, behaviour }) as config) allEntries msg (Li
 
                         Pending { id, pending, shiftDown } ->
                             let
-                                newListbox =
-                                    { listbox | focus = Focus pending }
+                                newData =
+                                    { data | focus = Focus pending }
 
                                 ( x, y ) =
                                     newPosition behaviour entryDomData
                             in
                             if behaviour.selectionFollowsFocus && not shiftDown then
-                                newListbox
-                                    |> Listbox
+                                newData
                                     |> fromModel
                                     |> withSelection [ a ]
                                     |> withEffect (setViewportOf id x y)
 
                             else if shiftDown then
-                                newListbox
-                                    |> Listbox
+                                newData
                                     |> fromModel
                                     |> toggle a
                                     |> withEffect (setViewportOf id x y)
 
                             else
-                                fromModel (Listbox newListbox)
+                                fromModel newData
                                     |> withEffect (setViewportOf id x y)
 
         ViewportOfListReceived direction a result ->
@@ -1648,7 +1642,7 @@ updateHelp ((UpdateConfig { uniqueId, behaviour }) as config) allEntries msg (Li
                     unchanged
 
                 Ok viewport ->
-                    case listbox.focus of
+                    case data.focus of
                         NoFocus ->
                             unchanged
 
@@ -1657,8 +1651,8 @@ updateHelp ((UpdateConfig { uniqueId, behaviour }) as config) allEntries msg (Li
 
                         Pending { id, pending, shiftDown } ->
                             let
-                                newListbox =
-                                    { listbox | focus = Focus pending }
+                                newData =
+                                    { data | focus = Focus pending }
 
                                 effect =
                                     case direction of
@@ -1673,34 +1667,31 @@ updateHelp ((UpdateConfig { uniqueId, behaviour }) as config) allEntries msg (Li
                                                 0
                             in
                             if behaviour.selectionFollowsFocus && not shiftDown then
-                                newListbox
-                                    |> Listbox
+                                newData
                                     |> fromModel
                                     |> withSelection [ a ]
                                     |> withEffect effect
 
                             else if shiftDown then
-                                newListbox
-                                    |> Listbox
+                                newData
                                     |> fromModel
                                     |> toggle a
                                     |> withEffect effect
 
                             else
-                                newListbox
-                                    |> Listbox
+                                newData
                                     |> fromModel
                                     |> withEffect effect
 
         -- LIST
         ListMouseDown ->
-            fromModel (Listbox { listbox | preventScroll = True })
+            fromModel { data | preventScroll = True }
 
         ListMouseUp ->
-            fromModel (Listbox { listbox | preventScroll = False })
+            fromModel { data | preventScroll = False }
 
         ListFocused id ->
-            if listbox.preventScroll then
+            if data.preventScroll then
                 unchanged
 
             else
@@ -1708,15 +1699,13 @@ updateHelp ((UpdateConfig { uniqueId, behaviour }) as config) allEntries msg (Li
 
         ListBlured ->
             fromModel
-                (Listbox
-                    { listbox
-                        | query = NoQuery
-                        , preventScroll = False
-                    }
-                )
+                { data
+                    | query = NoQuery
+                    , preventScroll = False
+                }
 
         ListArrowUpDown id ->
-            case listbox.focus of
+            case data.focus of
                 NoFocus ->
                     initFocus id
 
@@ -1727,7 +1716,7 @@ updateHelp ((UpdateConfig { uniqueId, behaviour }) as config) allEntries msg (Li
                     unchanged
 
         ListShiftArrowUpDown id ->
-            case listbox.focus of
+            case data.focus of
                 NoFocus ->
                     initFocus id
 
@@ -1738,7 +1727,7 @@ updateHelp ((UpdateConfig { uniqueId, behaviour }) as config) allEntries msg (Li
                     unchanged
 
         ListArrowDownDown id ->
-            case listbox.focus of
+            case data.focus of
                 NoFocus ->
                     initFocus id
 
@@ -1749,7 +1738,7 @@ updateHelp ((UpdateConfig { uniqueId, behaviour }) as config) allEntries msg (Li
                     unchanged
 
         ListShiftArrowDownDown id ->
-            case listbox.focus of
+            case data.focus of
                 NoFocus ->
                     initFocus id
 
@@ -1760,7 +1749,7 @@ updateHelp ((UpdateConfig { uniqueId, behaviour }) as config) allEntries msg (Li
                     unchanged
 
         ListEnterDown id ->
-            case focusedEntry config allEntries (Listbox listbox) of
+            case focusedEntry config allEntries (Listbox data) of
                 Nothing ->
                     unchanged
 
@@ -1769,7 +1758,7 @@ updateHelp ((UpdateConfig { uniqueId, behaviour }) as config) allEntries msg (Li
                         |> toggle a
 
         ListSpaceDown id ->
-            case focusedEntry config allEntries (Listbox listbox) of
+            case focusedEntry config allEntries (Listbox data) of
                 Nothing ->
                     unchanged
 
@@ -1781,8 +1770,8 @@ updateHelp ((UpdateConfig { uniqueId, behaviour }) as config) allEntries msg (Li
             let
                 selected =
                     Maybe.map2 (range uniqueId allEntries)
-                        (currentFocus listbox.focus)
-                        listbox.maybeLastSelectedEntry
+                        (currentFocus data.focus)
+                        data.maybeLastSelectedEntry
                         |> Maybe.withDefault []
             in
             case selected of
@@ -1799,11 +1788,10 @@ updateHelp ((UpdateConfig { uniqueId, behaviour }) as config) allEntries msg (Li
                     unchanged
 
                 Just a ->
-                    { listbox
+                    { data
                         | query = NoQuery
                         , focus = Focus (uniqueId a)
                     }
-                        |> Listbox
                         |> fromModel
                         |> withEffect (scrollListToTop id)
 
@@ -1815,7 +1803,7 @@ updateHelp ((UpdateConfig { uniqueId, behaviour }) as config) allEntries msg (Li
                 Just hash ->
                     let
                         selected =
-                            listbox.focus
+                            data.focus
                                 |> currentFocus
                                 |> Maybe.map (range uniqueId allEntries hash)
                                 |> Maybe.withDefault []
@@ -1825,16 +1813,15 @@ updateHelp ((UpdateConfig { uniqueId, behaviour }) as config) allEntries msg (Li
                             unchanged
 
                         a :: listA ->
-                            { listbox
+                            { data
                                 | focus = Focus hash
                                 , hover =
                                     if behaviour.separateFocus then
-                                        listbox.hover
+                                        data.hover
 
                                     else
                                         Just hash
                             }
-                                |> Listbox
                                 |> fromModel
                                 |> select a listA
                                 |> withEffect (scrollListToTop id)
@@ -1845,11 +1832,10 @@ updateHelp ((UpdateConfig { uniqueId, behaviour }) as config) allEntries msg (Li
                     unchanged
 
                 Just a ->
-                    { listbox
+                    { data
                         | query = NoQuery
                         , focus = Focus (uniqueId a)
                     }
-                        |> Listbox
                         |> fromModel
                         |> withEffect (scrollListToBottom id)
 
@@ -1861,7 +1847,7 @@ updateHelp ((UpdateConfig { uniqueId, behaviour }) as config) allEntries msg (Li
                 Just hash ->
                     let
                         selected =
-                            listbox.focus
+                            data.focus
                                 |> currentFocus
                                 |> Maybe.map (range uniqueId allEntries hash)
                                 |> Maybe.withDefault []
@@ -1871,16 +1857,15 @@ updateHelp ((UpdateConfig { uniqueId, behaviour }) as config) allEntries msg (Li
                             unchanged
 
                         a :: listA ->
-                            { listbox
+                            { data
                                 | focus = Focus hash
                                 , hover =
                                     if behaviour.separateFocus then
-                                        listbox.hover
+                                        data.hover
 
                                     else
                                         Just hash
                             }
-                                |> Listbox
                                 |> fromModel
                                 |> select a listA
                                 |> withEffect (scrollListToBottom id)
@@ -1923,7 +1908,7 @@ updateHelp ((UpdateConfig { uniqueId, behaviour }) as config) allEntries msg (Li
                 TypeAhead timeout matchesQuery ->
                     let
                         ( newQuery, queryText ) =
-                            case listbox.query of
+                            case data.query of
                                 NoQuery ->
                                     ( Query timeout currentTime key, key )
 
@@ -1933,29 +1918,28 @@ updateHelp ((UpdateConfig { uniqueId, behaviour }) as config) allEntries msg (Li
                         maybeHash =
                             Maybe.andThen
                                 (findWith matchesQuery uniqueId queryText allEntries)
-                                (currentFocus listbox.focus)
+                                (currentFocus data.focus)
                     in
                     case maybeHash of
                         Nothing ->
                             unchanged
 
                         Just hash ->
-                            { listbox
+                            { data
                                 | query = newQuery
                                 , focus = Focus hash
                                 , hover =
                                     if behaviour.separateFocus then
-                                        listbox.hover
+                                        data.hover
 
                                     else
                                         Just hash
                             }
-                                |> Listbox
                                 |> fromModel
                                 |> withEffect (attemptToScrollToOption behaviour id hash Nothing)
 
         Tick currentTime ->
-            case listbox.query of
+            case data.query of
                 NoQuery ->
                     unchanged
 
@@ -1964,7 +1948,7 @@ updateHelp ((UpdateConfig { uniqueId, behaviour }) as config) allEntries msg (Li
                         (Time.posixToMillis currentTime - Time.posixToMillis time)
                             > timeout
                     then
-                        fromModel (Listbox { listbox | query = NoQuery })
+                        fromModel { data | query = NoQuery }
 
                     else
                         unchanged
@@ -1972,30 +1956,26 @@ updateHelp ((UpdateConfig { uniqueId, behaviour }) as config) allEntries msg (Li
         -- ENTRY
         EntryMouseEntered newFocus ->
             fromModel
-                (Listbox
-                    { listbox
-                        | focus =
-                            if behaviour.separateFocus then
-                                listbox.focus
+                { data
+                    | focus =
+                        if behaviour.separateFocus then
+                            data.focus
 
-                            else
-                                Focus newFocus
-                        , hover = Just newFocus
-                    }
-                )
+                        else
+                            Focus newFocus
+                    , hover = Just newFocus
+                }
 
         EntryMouseLeft ->
             fromModel
-                (Listbox
-                    { listbox
-                        | hover =
-                            if behaviour.separateFocus then
-                                Nothing
+                { data
+                    | hover =
+                        if behaviour.separateFocus then
+                            Nothing
 
-                            else
-                                listbox.hover
-                    }
-                )
+                        else
+                            data.hover
+                }
 
         EntryClicked a ->
             let
@@ -2003,22 +1983,20 @@ updateHelp ((UpdateConfig { uniqueId, behaviour }) as config) allEntries msg (Li
                     uniqueId a
             in
             if behaviour.selectionFollowsFocus then
-                { listbox
+                { data
                     | query = NoQuery
                     , focus = Focus hash
                     , hover = Just hash
                 }
-                    |> Listbox
                     |> fromModel
                     |> select a selection
 
             else
-                { listbox
+                { data
                     | query = NoQuery
                     , focus = Focus hash
                     , hover = Just hash
                 }
-                    |> Listbox
                     |> fromModel
                     |> toggle a
 
