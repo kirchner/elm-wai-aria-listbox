@@ -1599,89 +1599,85 @@ updateHelp ((UpdateConfig { uniqueId, behaviour }) as config) allEntries msg dat
         NoOp ->
             unchanged
 
-        BrowserReturnedDomInfoOption a result ->
-            case result of
-                Err id ->
+        BrowserReturnedDomInfoOption a (Err id) ->
+            unchanged
+
+        BrowserReturnedDomInfoOption a (Ok entryDomData) ->
+            case data.focus of
+                NoFocus ->
                     unchanged
 
-                Ok entryDomData ->
-                    case data.focus of
-                        NoFocus ->
-                            unchanged
-
-                        Focus _ ->
-                            unchanged
-
-                        Pending { id, pending, shiftDown } ->
-                            let
-                                newData =
-                                    { data | focus = Focus pending }
-
-                                ( x, y ) =
-                                    newPosition behaviour entryDomData
-                            in
-                            if behaviour.selectionFollowsFocus && not shiftDown then
-                                newData
-                                    |> fromModel
-                                    |> withSelection [ a ]
-                                    |> withEffect (setViewportOf id x y)
-
-                            else if shiftDown then
-                                newData
-                                    |> fromModel
-                                    |> toggle a
-                                    |> withEffect (setViewportOf id x y)
-
-                            else
-                                fromModel newData
-                                    |> withEffect (setViewportOf id x y)
-
-        ViewportOfListReceived direction a result ->
-            case result of
-                Err id ->
+                Focus _ ->
                     unchanged
 
-                Ok viewport ->
-                    case data.focus of
-                        NoFocus ->
-                            unchanged
+                Pending { id, pending, shiftDown } ->
+                    let
+                        newData =
+                            { data | focus = Focus pending }
 
-                        Focus _ ->
-                            unchanged
+                        ( x, y ) =
+                            newPosition behaviour entryDomData
+                    in
+                    if behaviour.selectionFollowsFocus && not shiftDown then
+                        newData
+                            |> fromModel
+                            |> withSelection [ a ]
+                            |> withEffect (setViewportOf id x y)
 
-                        Pending { id, pending, shiftDown } ->
-                            let
-                                newData =
-                                    { data | focus = Focus pending }
+                    else if shiftDown then
+                        newData
+                            |> fromModel
+                            |> toggle a
+                            |> withEffect (setViewportOf id x y)
 
-                                effect =
-                                    case direction of
-                                        Up ->
-                                            setViewportOf id
-                                                viewport.viewport.x
-                                                viewport.scene.height
+                    else
+                        fromModel newData
+                            |> withEffect (setViewportOf id x y)
 
-                                        Down ->
-                                            setViewportOf id
-                                                viewport.viewport.x
-                                                0
-                            in
-                            if behaviour.selectionFollowsFocus && not shiftDown then
-                                newData
-                                    |> fromModel
-                                    |> withSelection [ a ]
-                                    |> withEffect effect
+        ViewportOfListReceived direction a (Err id) ->
+            unchanged
 
-                            else if shiftDown then
-                                newData
-                                    |> fromModel
-                                    |> toggle a
-                                    |> withEffect effect
+        ViewportOfListReceived direction a (Ok viewport) ->
+            case data.focus of
+                NoFocus ->
+                    unchanged
 
-                            else
-                                newData
-                                    |> fromModel
-                                    |> withEffect effect
+                Focus _ ->
+                    unchanged
+
+                Pending { id, pending, shiftDown } ->
+                    let
+                        newData =
+                            { data | focus = Focus pending }
+
+                        effect =
+                            case direction of
+                                Up ->
+                                    setViewportOf id
+                                        viewport.viewport.x
+                                        viewport.scene.height
+
+                                Down ->
+                                    setViewportOf id
+                                        viewport.viewport.x
+                                        0
+                    in
+                    if behaviour.selectionFollowsFocus && not shiftDown then
+                        newData
+                            |> fromModel
+                            |> withSelection [ a ]
+                            |> withEffect effect
+
+                    else if shiftDown then
+                        newData
+                            |> fromModel
+                            |> toggle a
+                            |> withEffect effect
+
+                    else
+                        newData
+                            |> fromModel
+                            |> withEffect effect
 
         -- LIST
         ListMouseDown ->
