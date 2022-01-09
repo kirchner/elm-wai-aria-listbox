@@ -289,13 +289,7 @@ update (UpdateConfig cfg) entries msg ((Combobox data) as combobox) value =
 
         InputAltArrowUpPressed isOpen ->
             if isOpen then
-                if
-                    Listbox.focusedEntry
-                        (listboxUpdateConfig cfg.uniqueId cfg.behaviour)
-                        entries
-                        data.listbox
-                        == Nothing
-                then
+                if Listbox.focusedEntry cfg.uniqueId entries data.listbox == Nothing then
                     ( Combobox
                         { data
                             | listbox = Listbox.init
@@ -418,20 +412,18 @@ update (UpdateConfig cfg) entries msg ((Combobox data) as combobox) value =
                     )
 
 
-listboxUpdateConfig : (a -> String) -> Behaviour a -> Listbox.UpdateConfig a
 listboxUpdateConfig uniqueId behaviour =
-    Listbox.updateConfig
-        { uniqueId = uniqueId
-        , behaviour =
-            { jumpAtEnds = False
-            , separateFocus = behaviour.separateFocus
-            , selectionFollowsFocus = True
-            , handleHomeAndEnd = behaviour.handleHomeAndEnd
-            , typeAhead = Listbox.noTypeAhead
-            , minimalGap = behaviour.minimalGap
-            , initialGap = behaviour.initialGap
-            }
+    { uniqueId = uniqueId
+    , behaviour =
+        { jumpAtEnds = False
+        , separateFocus = behaviour.separateFocus
+        , selectionFollowsFocus = True
+        , handleHomeAndEnd = behaviour.handleHomeAndEnd
+        , typeAhead = Listbox.noTypeAhead
+        , minimalGap = behaviour.minimalGap
+        , initialGap = behaviour.initialGap
         }
+    }
 
 
 
@@ -847,11 +839,10 @@ customView (CustomViewConfig config) (Views views) instance entries (Combobox da
             Listbox.focusedEntryId listboxViewConfig listboxInstance entries data.listbox
 
         listboxViewConfig =
-            Listbox.viewConfig
-                { uniqueId = config.uniqueId
-                , focusable = False
-                , markActiveDescendant = False
-                }
+            { uniqueId = config.uniqueId
+            , focusable = False
+            , markActiveDescendant = False
+            }
 
         listboxInstance =
             { id = listboxId instance

@@ -73,9 +73,7 @@ import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
 import Listbox as Listbox
     exposing
-        ( HtmlAttributes
-        , HtmlDetails
-        , Listbox
+        ( Listbox
         , TypeAhead
         )
 import Task
@@ -466,11 +464,10 @@ customView (Views views) config instance allEntries (Dropdown data) maybeSelecti
             config
 
         listboxConfig =
-            Listbox.viewConfig
-                { uniqueId = uniqueId
-                , focusable = True
-                , markActiveDescendant = True
-                }
+            { uniqueId = uniqueId
+            , focusable = True
+            , markActiveDescendant = True
+            }
 
         ariaExpanded =
             if data.open then
@@ -729,18 +726,17 @@ update (UpdateConfig { uniqueId, behaviour }) allEntries msg dropdown maybeSelec
             dropdown
 
         listboxConfig =
-            Listbox.updateConfig
-                { uniqueId = uniqueId
-                , behaviour =
-                    { jumpAtEnds = behaviour.jumpAtEnds
-                    , separateFocus = behaviour.separateFocus
-                    , selectionFollowsFocus = behaviour.selectionFollowsFocus
-                    , handleHomeAndEnd = behaviour.handleHomeAndEnd
-                    , typeAhead = behaviour.typeAhead
-                    , minimalGap = behaviour.minimalGap
-                    , initialGap = behaviour.initialGap
-                    }
+            { uniqueId = uniqueId
+            , behaviour =
+                { jumpAtEnds = behaviour.jumpAtEnds
+                , separateFocus = behaviour.separateFocus
+                , selectionFollowsFocus = behaviour.selectionFollowsFocus
+                , handleHomeAndEnd = behaviour.handleHomeAndEnd
+                , typeAhead = behaviour.typeAhead
+                , minimalGap = behaviour.minimalGap
+                , initialGap = behaviour.initialGap
                 }
+            }
     in
     case msg of
         NoOp ->

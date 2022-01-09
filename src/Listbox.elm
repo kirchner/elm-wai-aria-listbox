@@ -1,10 +1,10 @@
 module Listbox exposing
     ( view, Instance, Label, labelledBy, label, noLabel
+    , Views, html
+    , custom
     , Listbox, init
     , update, Msg, subscriptions
-    , UpdateConfig, updateConfig, Behaviour
-    , ViewConfig, viewConfig, Views, noDivider
-    , HtmlAttributes, HtmlDetails
+    , Behaviour
     , TypeAhead, noTypeAhead, simpleTypeAhead, typeAhead
     , viewUnique, updateUnique
     , focusEntryUnique, focusNextOrFirstEntryUnique, focusPreviousOrFirstEntryUnique
@@ -13,7 +13,6 @@ module Listbox exposing
     , focus
     , scrollToFocus
     , preventDefaultOnKeyDown
-    , html, custom
     )
 
 {-| Implementation of the [listbox
@@ -31,6 +30,16 @@ interactions this widget offers.
 @docs view, Instance, Label, labelledBy, label, noLabel
 
 
+# View customization
+
+@docs Views, html
+
+
+## Advanced customization
+
+@docs custom
+
+
 # State
 
 @docs Listbox, init
@@ -39,21 +48,7 @@ interactions this widget offers.
 # Update
 
 @docs update, Msg, subscriptions
-
-
-# Configuration
-
-
-## Update
-
-@docs UpdateConfig, updateConfig, Behaviour
-
-
-## View
-
-@docs ViewConfig, viewConfig, Views, noDivider
-
-@docs HtmlAttributes, HtmlDetails
+@docs Behaviour
 
 
 ## Type-ahead
@@ -92,14 +87,6 @@ section.
 @docs scrollToFocus
 
 @docs preventDefaultOnKeyDown
-
-
-## Using different DOM libraries
-
-You can use these functions if you want to use other DOM libraries, like for
-example `rtfeldman/elm-css` or `mdgriffith/elm-ui`.
-
-@docs html, custom
 
 -}
 
@@ -213,16 +200,16 @@ focus { id } =
 
 {-| Returns the option which currently has keyboard focus.
 -}
-focusedEntry : UpdateConfig a -> List a -> Listbox -> Maybe a
-focusedEntry (UpdateConfig config) allEntries (Listbox listbox) =
-    Maybe.andThen (find config.uniqueId allEntries) (currentFocus listbox.focus)
+focusedEntry : (a -> String) -> List a -> Listbox -> Maybe a
+focusedEntry uniqueId allEntries (Listbox listbox) =
+    Maybe.andThen (find uniqueId allEntries) (currentFocus listbox.focus)
 
 
 {-| Returns the option which currently has mouse focus.
 -}
-hoveredEntry : UpdateConfig a -> List a -> Listbox -> Maybe a
-hoveredEntry (UpdateConfig config) allEntries (Listbox listbox) =
-    Maybe.andThen (find config.uniqueId allEntries) listbox.hover
+hoveredEntry : (a -> String) -> List a -> Listbox -> Maybe a
+hoveredEntry uniqueId allEntries (Listbox listbox) =
+    Maybe.andThen (find uniqueId allEntries) listbox.hover
 
 
 {-| Sets the keyboard focus to the provided options.
@@ -231,8 +218,15 @@ hoveredEntry (UpdateConfig config) allEntries (Listbox listbox) =
 want to apply `scrollToFocus` afterwards.
 
 -}
-focusEntry : UpdateConfig a -> a -> Listbox -> List a -> ( Listbox, List a )
-focusEntry (UpdateConfig config) newEntry (Listbox listbox) selection =
+focusEntry :
+    { uniqueId : a -> String
+    , behaviour : Behaviour a
+    }
+    -> a
+    -> Listbox
+    -> List a
+    -> ( Listbox, List a )
+focusEntry config newEntry (Listbox listbox) selection =
     ( Listbox
         { listbox
             | query = NoQuery
@@ -254,12 +248,14 @@ want to apply `scrollToFocus` afterwards.
 
 -}
 focusNextOrFirstEntry :
-    UpdateConfig a
+    { uniqueId : a -> String
+    , behaviour : Behaviour a
+    }
     -> List a
     -> Listbox
     -> List a
     -> ( Listbox, List a )
-focusNextOrFirstEntry (UpdateConfig config) allEntries (Listbox listbox) selection =
+focusNextOrFirstEntry config allEntries (Listbox listbox) selection =
     let
         { uniqueId, behaviour } =
             config
@@ -312,12 +308,14 @@ want to apply `scrollToFocus` afterwards.
 
 -}
 focusPreviousOrFirstEntry :
-    UpdateConfig a
+    { uniqueId : a -> String
+    , behaviour : Behaviour a
+    }
     -> List a
     -> Listbox
     -> List a
     -> ( Listbox, List a )
-focusPreviousOrFirstEntry (UpdateConfig config) allEntries (Listbox listbox) selection =
+focusPreviousOrFirstEntry config allEntries (Listbox listbox) selection =
     let
         { uniqueId, behaviour } =
             config
@@ -381,88 +379,7 @@ scrollToFocus behaviour { id, lift } (Listbox listbox) =
 
 
 
----- VIEW CONFIG
-
-
-{-| -}
-type ViewConfig a
-    = ViewConfig
-        { uniqueId : a -> String
-        , focusable : Bool
-        , markActiveDescendant : Bool
-        }
-
-
-{-| Generate a `ViewConfig` by providing the following:
-
-  - **uniqueId**: A hash function for the entries.
-
-  - **views**: View customizations.
-
-You usually do **not** want to store this inside your model.
-
--}
-viewConfig :
-    { uniqueId : a -> String
-    , focusable : Bool
-    , markActiveDescendant : Bool
-    }
-    -> ViewConfig a
-viewConfig =
-    ViewConfig
-
-
-{-| Helper function which can be used for the `liDivider` field in your view
-customizations if you do not have any dividers in your listbox.
--}
-noDivider : Never -> HtmlDetails
-noDivider _ =
-    { attributes = []
-    , children = []
-    }
-
-
-{-| A list of attributes which never throw messages. Used to apply styling to
-a DOM element.
--}
-type alias HtmlAttributes =
-    List (Attribute Never)
-
-
-{-| Used to apply styling and content to a DOM element.
--}
-type alias HtmlDetails =
-    { attributes : List (Attribute Never)
-    , children : List (Html Never)
-    }
-
-
-
 ---- UPDATE CONFIG
-
-
-{-| -}
-type UpdateConfig a
-    = UpdateConfig
-        { uniqueId : a -> String
-        , behaviour : Behaviour a
-        }
-
-
-{-| Generate an `UpdateConfig` by providing the following:
-
-  - **uniqueId**: A hash function for the entries.
-
-  - **behaviour**: Behaviour customizations.
-
--}
-updateConfig :
-    { uniqueId : a -> String
-    , behaviour : Behaviour a
-    }
-    -> UpdateConfig a
-updateConfig =
-    UpdateConfig
 
 
 {-| **Available behaviour customizations**
@@ -646,8 +563,25 @@ to uniquely identify this listbox. For example:
     type Msg
         = ListboxMsg Listbox.Msg
 
+You can provide the following options:
+
+  - **uniqueId**: A hash function for the entries.
+
+  - TODO
+
 -}
-view : Views a node msg -> ViewConfig a -> Instance a msg -> List a -> Listbox -> List a -> node
+view :
+    Views a node msg
+    ->
+        { uniqueId : a -> String
+        , focusable : Bool
+        , markActiveDescendant : Bool
+        }
+    -> Instance a msg
+    -> List a
+    -> Listbox
+    -> List a
+    -> node
 view =
     viewHelp True
 
@@ -655,13 +589,17 @@ view =
 viewHelp :
     Bool
     -> Views a node msg
-    -> ViewConfig a
+    ->
+        { uniqueId : a -> String
+        , focusable : Bool
+        , markActiveDescendant : Bool
+        }
     -> Instance a msg
     -> List a
     -> Listbox
     -> List a
     -> node
-viewHelp multiSelectable (Views views) (ViewConfig config) instance allEntries (Listbox listbox) selection =
+viewHelp multiSelectable (Views views) config instance allEntries (Listbox listbox) selection =
     let
         { lift } =
             instance
@@ -688,7 +626,7 @@ viewHelp multiSelectable (Views views) (ViewConfig config) instance allEntries (
                 focused
                 hovered
                 selected
-                (ViewConfig config)
+                config
                 instance
                 listbox.query
                 entry
@@ -775,12 +713,16 @@ viewEntry :
     -> Bool
     -> Bool
     -> Bool
-    -> ViewConfig a
+    ->
+        { uniqueId : a -> String
+        , focusable : Bool
+        , markActiveDescendant : Bool
+        }
     -> Instance a msg
     -> Query
     -> a
     -> node
-viewEntry viewOption multiSelectable focused hovered selected (ViewConfig config) instance query entry =
+viewEntry viewOption multiSelectable focused hovered selected config instance query entry =
     let
         { uniqueId } =
             config
@@ -1185,12 +1127,15 @@ preventDefaultOnKeyDown instance decoder =
 {-| Returns the HTML id of the currently focused entry.
 -}
 focusedEntryId :
-    ViewConfig a
+    { uniqueId : a -> String
+    , focusable : Bool
+    , markActiveDescendant : Bool
+    }
     -> Instance a msg
     -> List a
     -> Listbox
     -> Maybe String
-focusedEntryId (ViewConfig config) instance entries (Listbox listbox) =
+focusedEntryId config instance entries (Listbox listbox) =
     case listbox.focus of
         NoFocus ->
             Nothing
@@ -1215,7 +1160,11 @@ instead of a `List a`.
 -}
 viewUnique :
     Views a node msg
-    -> ViewConfig a
+    ->
+        { uniqueId : a -> String
+        , focusable : Bool
+        , markActiveDescendant : Bool
+        }
     -> Instance a msg
     -> List a
     -> Listbox
@@ -1231,7 +1180,9 @@ type signature of this function and the one of `update` is that the last
 argument is a `Maybe a` instead of a `List a`.
 -}
 updateUnique :
-    UpdateConfig a
+    { uniqueId : a -> String
+    , behaviour : Behaviour a
+    }
     -> List a
     -> Msg a
     -> Listbox
@@ -1252,7 +1203,14 @@ updateUnique config allEntries msg listbox selection =
 want to apply `scrollToFocus` afterwards.
 
 -}
-focusEntryUnique : UpdateConfig a -> a -> Listbox -> Maybe a -> ( Listbox, Maybe a )
+focusEntryUnique :
+    { uniqueId : a -> String
+    , behaviour : Behaviour a
+    }
+    -> a
+    -> Listbox
+    -> Maybe a
+    -> ( Listbox, Maybe a )
 focusEntryUnique config newEntry listbox selection =
     withUnique selection (focusEntry config newEntry listbox)
 
@@ -1265,7 +1223,9 @@ want to apply `scrollToFocus` afterwards.
 
 -}
 focusNextOrFirstEntryUnique :
-    UpdateConfig a
+    { uniqueId : a -> String
+    , behaviour : Behaviour a
+    }
     -> List a
     -> Listbox
     -> Maybe a
@@ -1282,7 +1242,9 @@ want to apply `scrollToFocus` afterwards.
 
 -}
 focusPreviousOrFirstEntryUnique :
-    UpdateConfig a
+    { uniqueId : a -> String
+    , behaviour : Behaviour a
+    }
     -> List a
     -> Listbox
     -> Maybe a
@@ -1388,9 +1350,17 @@ For example:
 In a more sophisticated example, the entries could be dynamic, as well. (For
 example, loaded via an HTTP request.)
 
+You can provide the following customizations:
+
+  - **uniqueId**: A hash function for the entries.
+
+  - **behaviour**: Behaviour customizations.
+
 -}
 update :
-    UpdateConfig a
+    { uniqueId : a -> String
+    , behaviour : Behaviour a
+    }
     -> List a
     -> Msg a
     -> Listbox
@@ -1404,8 +1374,16 @@ update config entries msg (Listbox data) selection =
     ( Listbox newData, cmd, newSelection )
 
 
-updateHelp : UpdateConfig a -> List a -> Msg a -> Data -> List a -> ( Data, Cmd (Msg a), List a )
-updateHelp ((UpdateConfig { uniqueId, behaviour }) as config) allEntries msg data selection =
+updateHelp :
+    { uniqueId : a -> String
+    , behaviour : Behaviour a
+    }
+    -> List a
+    -> Msg a
+    -> Data
+    -> List a
+    -> ( Data, Cmd (Msg a), List a )
+updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
     let
         unchanged =
             ( data
@@ -1745,7 +1723,7 @@ updateHelp ((UpdateConfig { uniqueId, behaviour }) as config) allEntries msg dat
                     unchanged
 
         ListEnterDown id ->
-            case focusedEntry config allEntries (Listbox data) of
+            case focusedEntry config.uniqueId allEntries (Listbox data) of
                 Nothing ->
                     unchanged
 
@@ -1754,7 +1732,7 @@ updateHelp ((UpdateConfig { uniqueId, behaviour }) as config) allEntries msg dat
                         |> toggle a
 
         ListSpaceDown id ->
-            case focusedEntry config allEntries (Listbox data) of
+            case focusedEntry config.uniqueId allEntries (Listbox data) of
                 Nothing ->
                     unchanged
 
