@@ -365,17 +365,15 @@ current keyboard focus is visible.
 scrollToFocus : Behaviour a -> Instance a msg -> Listbox -> Cmd msg
 scrollToFocus behaviour { id, lift } (Listbox listbox) =
     Cmd.map lift
-        (perform
-            (case listbox.focus of
-                NoFocus ->
-                    CmdNone
+        (case listbox.focus of
+            NoFocus ->
+                Cmd.none
 
-                Focus current ->
-                    ScrollToOption behaviour id current Nothing
+            Focus current ->
+                attemptToScrollToOption behaviour id current Nothing
 
-                Pending { current } ->
-                    ScrollToOption behaviour id current Nothing
-            )
+            Pending { current } ->
+                attemptToScrollToOption behaviour id current Nothing
         )
 
 
@@ -1327,7 +1325,7 @@ listToMaybe listA =
 -}
 type Msg a
     = NoOp
-    | EntryDomDataReceived a (Result Dom.Error EntryDomData)
+    | BrowserReturnedDomInfoOption a (Result Dom.Error DomInfoOption)
     | ViewportOfListReceived Direction a (Result Dom.Error Dom.Viewport)
       -- LIST
     | ListMouseDown
@@ -1359,19 +1357,6 @@ type Msg a
 type Direction
     = Up
     | Down
-
-
-type Effect a
-    = CmdNone
-    | TimeNow (Posix -> Msg a)
-    | DomFocus String
-      -- SCROLLING
-    | GetViewportOfList (Result Dom.Error Dom.Viewport -> Msg a) String
-    | ScrollListToTop String
-    | ScrollListToBottom String
-    | ScrollToOption (Behaviour a) String String (Maybe String)
-    | GetViewportOf (Result Dom.Error EntryDomData -> Msg a) (Behaviour a) String String String
-    | SetViewportOf String Float Float
 
 
 {-| Use this function to update the listbox state. You have to provide the same
@@ -1409,11 +1394,7 @@ update :
     -> List a
     -> ( Listbox, Cmd (Msg a), List a )
 update config entries msg listbox selection =
-    let
-        ( newListbox, effect, newSelection ) =
-            updateHelp config entries msg listbox selection
-    in
-    ( newListbox, perform effect, newSelection )
+    updateHelp config entries msg listbox selection
 
 
 updateHelp :
@@ -1422,18 +1403,18 @@ updateHelp :
     -> Msg a
     -> Listbox
     -> List a
-    -> ( Listbox, Effect a, List a )
+    -> ( Listbox, Cmd (Msg a), List a )
 updateHelp ((UpdateConfig { uniqueId, behaviour }) as config) allEntries msg (Listbox listbox) selection =
     let
         unchanged =
             ( Listbox listbox
-            , CmdNone
+            , Cmd.none
             , selection
             )
 
         fromModel (Listbox newListbox) =
             ( Listbox newListbox
-            , CmdNone
+            , Cmd.none
             , selection
             )
 
@@ -1496,13 +1477,13 @@ updateHelp ((UpdateConfig { uniqueId, behaviour }) as config) allEntries msg (Li
                     if behaviour.selectionFollowsFocus then
                         newListbox
                             |> fromModel
-                            |> withEffect (ScrollToOption behaviour id hash Nothing)
+                            |> withEffect (attemptToScrollToOption behaviour id hash Nothing)
                             |> select a []
 
                     else
                         newListbox
                             |> fromModel
-                            |> withEffect (ScrollToOption behaviour id hash Nothing)
+                            |> withEffect (attemptToScrollToOption behaviour id hash Nothing)
 
         scheduleFocusPrevious id shiftDown current =
             case findPrevious uniqueId allEntries current of
@@ -1520,8 +1501,7 @@ updateHelp ((UpdateConfig { uniqueId, behaviour }) as config) allEntries msg (Li
                         }
                             |> Listbox
                             |> fromModel
-                            |> withEffect
-                                (GetViewportOfList (ViewportOfListReceived Up a) id)
+                            |> withEffect (getViewportOfList id Up a)
 
                     else if behaviour.selectionFollowsFocus then
                         case find uniqueId allEntries current of
@@ -1557,7 +1537,7 @@ updateHelp ((UpdateConfig { uniqueId, behaviour }) as config) allEntries msg (Li
                     }
                         |> Listbox
                         |> fromModel
-                        |> withEffect (GetViewportOf (EntryDomDataReceived a) behaviour id hash current)
+                        |> withEffect (attemptToGetDomInfoOption id hash current a)
 
                 Nothing ->
                     initFocus id
@@ -1578,8 +1558,7 @@ updateHelp ((UpdateConfig { uniqueId, behaviour }) as config) allEntries msg (Li
                         }
                             |> Listbox
                             |> fromModel
-                            |> withEffect
-                                (GetViewportOfList (ViewportOfListReceived Down a) id)
+                            |> withEffect (getViewportOfList id Down a)
 
                     else if behaviour.selectionFollowsFocus then
                         case find uniqueId allEntries current of
@@ -1615,7 +1594,7 @@ updateHelp ((UpdateConfig { uniqueId, behaviour }) as config) allEntries msg (Li
                                     }
                         }
                         |> fromModel
-                        |> withEffect (GetViewportOf (EntryDomDataReceived a) behaviour id hash current)
+                        |> withEffect (attemptToGetDomInfoOption id hash current a)
 
                 Nothing ->
                     initFocus id
@@ -1624,7 +1603,7 @@ updateHelp ((UpdateConfig { uniqueId, behaviour }) as config) allEntries msg (Li
         NoOp ->
             unchanged
 
-        EntryDomDataReceived a result ->
+        BrowserReturnedDomInfoOption a result ->
             case result of
                 Err id ->
                     unchanged
@@ -1650,18 +1629,18 @@ updateHelp ((UpdateConfig { uniqueId, behaviour }) as config) allEntries msg (Li
                                     |> Listbox
                                     |> fromModel
                                     |> withSelection [ a ]
-                                    |> withEffect (SetViewportOf id x y)
+                                    |> withEffect (setViewportOf id x y)
 
                             else if shiftDown then
                                 newListbox
                                     |> Listbox
                                     |> fromModel
                                     |> toggle a
-                                    |> withEffect (SetViewportOf id x y)
+                                    |> withEffect (setViewportOf id x y)
 
                             else
                                 fromModel (Listbox newListbox)
-                                    |> withEffect (SetViewportOf id x y)
+                                    |> withEffect (setViewportOf id x y)
 
         ViewportOfListReceived direction a result ->
             case result of
@@ -1684,12 +1663,12 @@ updateHelp ((UpdateConfig { uniqueId, behaviour }) as config) allEntries msg (Li
                                 effect =
                                     case direction of
                                         Up ->
-                                            SetViewportOf id
+                                            setViewportOf id
                                                 viewport.viewport.x
                                                 viewport.scene.height
 
                                         Down ->
-                                            SetViewportOf id
+                                            setViewportOf id
                                                 viewport.viewport.x
                                                 0
                             in
@@ -1826,7 +1805,7 @@ updateHelp ((UpdateConfig { uniqueId, behaviour }) as config) allEntries msg (Li
                     }
                         |> Listbox
                         |> fromModel
-                        |> withEffect (ScrollListToTop id)
+                        |> withEffect (scrollListToTop id)
 
         ListControlShiftHomeDown id ->
             case Maybe.map uniqueId (List.head allEntries) of
@@ -1858,7 +1837,7 @@ updateHelp ((UpdateConfig { uniqueId, behaviour }) as config) allEntries msg (Li
                                 |> Listbox
                                 |> fromModel
                                 |> select a listA
-                                |> withEffect (ScrollListToTop id)
+                                |> withEffect (scrollListToTop id)
 
         ListEndDown id ->
             case lastEntry allEntries of
@@ -1872,7 +1851,7 @@ updateHelp ((UpdateConfig { uniqueId, behaviour }) as config) allEntries msg (Li
                     }
                         |> Listbox
                         |> fromModel
-                        |> withEffect (ScrollListToBottom id)
+                        |> withEffect (scrollListToBottom id)
 
         ListControlShiftEndDown id ->
             case Maybe.map uniqueId (lastEntry allEntries) of
@@ -1904,7 +1883,7 @@ updateHelp ((UpdateConfig { uniqueId, behaviour }) as config) allEntries msg (Li
                                 |> Listbox
                                 |> fromModel
                                 |> select a listA
-                                |> withEffect (ScrollListToBottom id)
+                                |> withEffect (scrollListToBottom id)
 
         ListControlADown ->
             let
@@ -1934,7 +1913,7 @@ updateHelp ((UpdateConfig { uniqueId, behaviour }) as config) allEntries msg (Li
 
                 TypeAhead _ _ ->
                     unchanged
-                        |> withEffect (TimeNow (CurrentTimeReceived id key))
+                        |> withEffect (Task.perform (CurrentTimeReceived id key) Time.now)
 
         CurrentTimeReceived id key currentTime ->
             case behaviour.typeAhead of
@@ -1973,7 +1952,7 @@ updateHelp ((UpdateConfig { uniqueId, behaviour }) as config) allEntries msg (Li
                             }
                                 |> Listbox
                                 |> fromModel
-                                |> withEffect (ScrollToOption behaviour id hash Nothing)
+                                |> withEffect (attemptToScrollToOption behaviour id hash Nothing)
 
         Tick currentTime ->
             case listbox.query of
@@ -2044,7 +2023,7 @@ updateHelp ((UpdateConfig { uniqueId, behaviour }) as config) allEntries msg (Li
                     |> toggle a
 
 
-type alias InitialEntryDomData =
+type alias DomInfoOptionInitial =
     { viewportList : Dom.Viewport
     , elementList : Dom.Element
     , elementLi : Dom.Element
@@ -2064,7 +2043,7 @@ focusPendingKeyboardFocus (Listbox listbox) =
             Listbox { listbox | focus = Focus pending }
 
 
-newPosition : Behaviour a -> EntryDomData -> ( Float, Float )
+newPosition : Behaviour a -> DomInfoOption -> ( Float, Float )
 newPosition behaviour entryDomData =
     let
         ---- SCROLLING
@@ -2140,7 +2119,7 @@ or fallback default =
             default
 
 
-type alias EntryDomData =
+type alias DomInfoOption =
     { viewportList : Dom.Viewport
     , elementList : Dom.Element
     , elementLi : Dom.Element
@@ -2148,164 +2127,172 @@ type alias EntryDomData =
     }
 
 
-perform : Effect a -> Cmd (Msg a)
-perform effect =
-    case effect of
-        CmdNone ->
-            Cmd.none
+getViewportOfList : String -> Direction -> a -> Cmd (Msg a)
+getViewportOfList id direction option =
+    Dom.getViewportOf (printListId id)
+        |> Task.attempt (ViewportOfListReceived direction option)
 
-        TimeNow toMsg ->
-            Task.perform toMsg Time.now
 
-        DomFocus id ->
-            Task.attempt (\_ -> NoOp) <|
-                Dom.focus id
+scrollListToTop : String -> Cmd (Msg a)
+scrollListToTop id =
+    Dom.getViewportOf (printListId id)
+        |> Task.andThen
+            (\list ->
+                Dom.setViewportOf (printListId id)
+                    list.viewport.x
+                    0
+            )
+        |> Task.attempt (\_ -> NoOp)
 
-        -- SCROLLING
-        GetViewportOfList toMsg id ->
-            Dom.getViewportOf (printListId id)
-                |> Task.attempt toMsg
 
-        ScrollListToTop id ->
-            Dom.getViewportOf (printListId id)
-                |> Task.andThen
-                    (\list ->
-                        Dom.setViewportOf (printListId id)
-                            list.viewport.x
-                            0
-                    )
+scrollListToBottom : String -> Cmd (Msg a)
+scrollListToBottom id =
+    Dom.getViewportOf (printListId id)
+        |> Task.andThen
+            (\list ->
+                Dom.setViewportOf (printListId id)
+                    list.viewport.x
+                    list.scene.height
+            )
+        |> Task.attempt (\_ -> NoOp)
+
+
+attemptToGetDomInfoOption : String -> String -> String -> a -> Cmd (Msg a)
+attemptToGetDomInfoOption id hash previousHash option =
+    getDomInfoOption id hash previousHash
+        |> Task.attempt (BrowserReturnedDomInfoOption option)
+
+
+setViewportOf : String -> Float -> Float -> Cmd (Msg a)
+setViewportOf id x y =
+    Dom.setViewportOf (printListId id) x y
+        |> Task.attempt (\_ -> NoOp)
+
+
+attemptToScrollToOption : Behaviour msg -> String -> String -> Maybe String -> Cmd (Msg a)
+attemptToScrollToOption behaviour id hash maybePreviousHash =
+    case maybePreviousHash of
+        Nothing ->
+            getDomInfoOptionInitial id hash
+                |> Task.andThen (scrollToOptionInitial behaviour id)
                 |> Task.attempt (\_ -> NoOp)
 
-        ScrollListToBottom id ->
-            Dom.getViewportOf (printListId id)
-                |> Task.andThen
-                    (\list ->
-                        Dom.setViewportOf (printListId id)
-                            list.viewport.x
-                            list.scene.height
-                    )
+        Just previousHash ->
+            getDomInfoOption id hash previousHash
+                |> Task.andThen (scrollToOption behaviour id)
                 |> Task.attempt (\_ -> NoOp)
 
-        GetViewportOf toMsg behaviour id hash previousHash ->
-            Task.map4 EntryDomData
-                (Dom.getViewportOf (printListId id))
-                (Dom.getElement (printListId id))
-                (Dom.getElement (printEntryId id hash))
-                (Dom.getElement (printEntryId id previousHash))
-                |> Task.attempt toMsg
 
-        SetViewportOf id x y ->
+
+-- TASKS
+
+
+getDomInfoOptionInitial : String -> String -> Task Dom.Error DomInfoOptionInitial
+getDomInfoOptionInitial id hash =
+    Task.map3 DomInfoOptionInitial
+        (Dom.getViewportOf (printListId id))
+        (Dom.getElement (printListId id))
+        (Dom.getElement (printEntryId id hash))
+
+
+getDomInfoOption : String -> String -> String -> Task Dom.Error DomInfoOption
+getDomInfoOption id hash previousHash =
+    Task.map4 DomInfoOption
+        (Dom.getViewportOf (printListId id))
+        (Dom.getElement (printListId id))
+        (Dom.getElement (printEntryId id hash))
+        (Dom.getElement (printEntryId id previousHash))
+
+
+scrollToOptionInitial : Behaviour msg -> String -> DomInfoOptionInitial -> Task Dom.Error ()
+scrollToOptionInitial behaviour id { viewportList, elementList, elementLi } =
+    let
+        { viewport } =
+            viewportList
+
+        liY =
+            elementLi.element.y - elementList.element.y + viewport.y
+
+        liHeight =
+            elementLi.element.height
+
+        entryHidden =
+            (liY + liHeight - behaviour.minimalGap < viewport.y)
+                || (liY + behaviour.minimalGap > viewport.y + viewport.height)
+    in
+    if entryHidden then
+        Dom.setViewportOf (printListId id) viewport.x (liY + liHeight / 2 - viewport.height / 2)
+
+    else
+        Task.succeed ()
+
+
+scrollToOption : Behaviour msg -> String -> DomInfoOption -> Task Dom.Error ()
+scrollToOption behaviour id entryDomData =
+    let
+        viewport =
+            entryDomData.viewportList.viewport
+
+        list =
+            entryDomData.elementList
+
+        li =
+            entryDomData.elementLi
+
+        previousLi =
+            entryDomData.elementPreviousLi
+
+        -- MEASUREMENTS
+        liY =
+            li.element.y - list.element.y + viewport.y
+
+        liHeight =
+            li.element.height
+
+        previousLiY =
+            previousLi.element.y - list.element.y + viewport.y
+
+        previousLiHeight =
+            previousLi.element.height
+
+        -- CONDITIONS
+        previousEntryHidden =
+            (previousLiY + previousLiHeight < viewport.y)
+                || (previousLiY > viewport.y + viewport.height)
+
+        newEntryTooLow =
+            liY + liHeight + behaviour.minimalGap > viewport.y + viewport.height
+
+        newEntryTooHigh =
+            liY - behaviour.minimalGap < viewport.y
+
+        -- EFFECT
+        centerNewEntry =
+            domSetViewportOf viewport.x <|
+                (liY + liHeight / 2 - viewport.height / 2)
+
+        scrollDownToNewEntry =
+            domSetViewportOf viewport.x <|
+                (liY + liHeight - viewport.height + behaviour.initialGap)
+
+        scrollUpToNewEntry =
+            domSetViewportOf viewport.x <|
+                (liY - behaviour.initialGap)
+
+        domSetViewportOf x y =
             Dom.setViewportOf (printListId id) x y
-                |> Task.attempt (\_ -> NoOp)
+    in
+    if previousEntryHidden then
+        centerNewEntry
 
-        ScrollToOption behaviour id hash maybePreviousHash ->
-            case maybePreviousHash of
-                Nothing ->
-                    Task.map3 InitialEntryDomData
-                        (Dom.getViewportOf (printListId id))
-                        (Dom.getElement (printListId id))
-                        (Dom.getElement (printEntryId id hash))
-                        |> Task.andThen
-                            (\{ viewportList, elementList, elementLi } ->
-                                let
-                                    { viewport } =
-                                        viewportList
+    else if newEntryTooLow then
+        scrollDownToNewEntry
 
-                                    liY =
-                                        elementLi.element.y - elementList.element.y + viewport.y
+    else if newEntryTooHigh then
+        scrollUpToNewEntry
 
-                                    liHeight =
-                                        elementLi.element.height
-
-                                    entryHidden =
-                                        (liY + liHeight - behaviour.minimalGap < viewport.y)
-                                            || (liY + behaviour.minimalGap > viewport.y + viewport.height)
-                                in
-                                if entryHidden then
-                                    Dom.setViewportOf
-                                        (printListId id)
-                                        viewport.x
-                                        (liY + liHeight / 2 - viewport.height / 2)
-
-                                else
-                                    Task.succeed ()
-                            )
-                        |> Task.attempt (\_ -> NoOp)
-
-                Just previousHash ->
-                    Task.map4 EntryDomData
-                        (Dom.getViewportOf (printListId id))
-                        (Dom.getElement (printListId id))
-                        (Dom.getElement (printEntryId id hash))
-                        (Dom.getElement (printEntryId id previousHash))
-                        |> Task.andThen
-                            (\entryDomData ->
-                                let
-                                    viewport =
-                                        entryDomData.viewportList.viewport
-
-                                    list =
-                                        entryDomData.elementList
-
-                                    li =
-                                        entryDomData.elementLi
-
-                                    previousLi =
-                                        entryDomData.elementPreviousLi
-
-                                    -- MEASUREMENTS
-                                    liY =
-                                        li.element.y - list.element.y + viewport.y
-
-                                    liHeight =
-                                        li.element.height
-
-                                    previousLiY =
-                                        previousLi.element.y - list.element.y + viewport.y
-
-                                    previousLiHeight =
-                                        previousLi.element.height
-
-                                    -- CONDITIONS
-                                    previousEntryHidden =
-                                        (previousLiY + previousLiHeight < viewport.y)
-                                            || (previousLiY > viewport.y + viewport.height)
-
-                                    newEntryTooLow =
-                                        liY + liHeight + behaviour.minimalGap > viewport.y + viewport.height
-
-                                    newEntryTooHigh =
-                                        liY - behaviour.minimalGap < viewport.y
-
-                                    -- EFFECT
-                                    centerNewEntry =
-                                        domSetViewportOf viewport.x <|
-                                            (liY + liHeight / 2 - viewport.height / 2)
-
-                                    scrollDownToNewEntry =
-                                        domSetViewportOf viewport.x <|
-                                            (liY + liHeight - viewport.height + behaviour.initialGap)
-
-                                    scrollUpToNewEntry =
-                                        domSetViewportOf viewport.x <|
-                                            (liY - behaviour.initialGap)
-
-                                    domSetViewportOf x y =
-                                        Dom.setViewportOf (printListId id) x y
-                                in
-                                if previousEntryHidden then
-                                    centerNewEntry
-
-                                else if newEntryTooLow then
-                                    scrollDownToNewEntry
-
-                                else if newEntryTooHigh then
-                                    scrollUpToNewEntry
-
-                                else
-                                    Task.succeed ()
-                            )
-                        |> Task.attempt (\_ -> NoOp)
+    else
+        Task.succeed ()
 
 
 
