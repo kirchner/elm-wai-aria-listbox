@@ -263,6 +263,7 @@ type alias ListboxAttrs msg =
     , role : String
     , ariaMultiselectable : String
     , ariaLabelledby : Maybe String
+    , ariaLabel : Maybe String
     , ariaActivedescendant : Maybe String
     , tabindex : Maybe Int
     , preventDefaultOnKeydown : Decoder ( msg, Bool )

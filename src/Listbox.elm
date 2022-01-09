@@ -1,7 +1,7 @@
 module Listbox exposing
     ( view, Instance, Label, labelledBy, label, noLabel
     , Views, html
-    , custom
+    , custom, ListboxAttrs, OptionAttrs
     , Listbox, init
     , update, Msg, subscriptions
     , Behaviour
@@ -37,7 +37,7 @@ interactions this widget offers.
 
 ## Advanced customization
 
-@docs custom
+@docs custom, ListboxAttrs, OptionAttrs
 
 
 # State
@@ -567,7 +567,7 @@ You can provide the following options:
 
   - **uniqueId**: A hash function for the entries.
 
-  - TODO
+  - **focusable**: Should the listbox be focusable?
 
 -}
 view :
@@ -599,39 +599,12 @@ viewHelp :
     -> Listbox
     -> List a
     -> node
-viewHelp multiSelectable (Views views) config instance allEntries (Listbox listbox) selection =
-    let
-        { lift } =
-            instance
-
-        { uniqueId } =
-            config
-
-        viewEntryHelp entry =
-            let
-                maybeHash =
-                    Just (uniqueId entry)
-
-                focused =
-                    currentFocus listbox.focus == maybeHash
-
-                hovered =
-                    listbox.hover == maybeHash
-
-                selected =
-                    List.any ((==) entry) selection
-            in
-            viewEntry views.option
-                multiSelectable
-                focused
-                hovered
-                selected
-                config
-                instance
-                listbox.query
-                entry
-
-        ariaLabelledby =
+viewHelp multiSelectable (Views views) config instance allEntries (Listbox data) selection =
+    views.listbox
+        { id = printListId instance.id
+        , role = "listbox"
+        , ariaMultiselectable = stringFromBool multiSelectable
+        , ariaLabelledby =
             case instance.label of
                 LabelledBy id ->
                     Just id
@@ -641,8 +614,7 @@ viewHelp multiSelectable (Views views) config instance allEntries (Listbox listb
 
                 NoLabel ->
                     Nothing
-
-        ariaLabel =
+        , ariaLabel =
             case instance.label of
                 LabelledBy _ ->
                     Nothing
@@ -652,22 +624,14 @@ viewHelp multiSelectable (Views views) config instance allEntries (Listbox listb
 
                 NoLabel ->
                     Nothing
-
-        ariaActivedescendant focused =
+        , ariaActivedescendant =
             if config.markActiveDescendant then
-                focused
-                    |> Maybe.andThen (find uniqueId allEntries)
-                    |> Maybe.map (uniqueId >> printEntryId instance.id)
+                currentFocus data.focus
+                    |> Maybe.andThen (find config.uniqueId allEntries)
+                    |> Maybe.map (config.uniqueId >> printEntryId instance.id)
 
             else
                 Nothing
-    in
-    views.listbox
-        { id = printListId instance.id
-        , role = "listbox"
-        , ariaMultiselectable = stringFromBool multiSelectable
-        , ariaLabelledby = ariaLabelledby
-        , ariaActivedescendant = ariaActivedescendant (currentFocus listbox.focus)
         , tabindex =
             if config.focusable then
                 Just 0
@@ -677,16 +641,82 @@ viewHelp multiSelectable (Views views) config instance allEntries (Listbox listb
         , preventDefaultOnKeydown =
             Decode.andThen
                 (listKeyPress False instance.id
-                    >> Decode.map (\msg -> ( lift msg, True ))
+                    >> Decode.map (\msg -> ( instance.lift msg, True ))
                 )
                 KeyInfo.decoder
-        , onMousedown = lift ListMouseDown
-        , onMouseup = lift ListMouseUp
-        , onFocus = lift (ListFocused instance.id)
-        , onBlur = lift ListBlured
+        , onMousedown = instance.lift ListMouseDown
+        , onMouseup = instance.lift ListMouseUp
+        , onFocus = instance.lift (ListFocused instance.id)
+        , onBlur = instance.lift ListBlured
         }
-        { options = List.map viewEntryHelp allEntries
+        { options =
+            List.map (viewOption multiSelectable views.option config instance selection data)
+                allEntries
         }
+
+
+viewOption :
+    Bool
+    ->
+        (OptionAttrs msg
+         ->
+            { selected : Bool
+            , focused : Bool
+            , hovered : Bool
+            , maybeQuery : Maybe String
+            }
+         -> a
+         -> node
+        )
+    ->
+        { uniqueId : a -> String
+        , focusable : Bool
+        , markActiveDescendant : Bool
+        }
+    -> Instance a msg
+    -> List a
+    -> Data
+    -> a
+    -> node
+viewOption multiSelectable toNode config instance selection data option =
+    let
+        maybeHash =
+            Just (config.uniqueId option)
+
+        selected =
+            List.any ((==) option) selection
+
+        hash =
+            config.uniqueId option
+    in
+    toNode
+        { id = printEntryId instance.id hash
+        , role = "option"
+        , ariaSelected =
+            if multiSelectable then
+                Just (stringFromBool selected)
+
+            else if selected then
+                Just "true"
+
+            else
+                Nothing
+        , onMouseenter = instance.lift (EntryMouseEntered hash)
+        , onMouseleave = instance.lift EntryMouseLeft
+        , onClick = instance.lift (EntryClicked option)
+        }
+        { selected = selected
+        , focused = currentFocus data.focus == maybeHash
+        , hovered = data.hover == maybeHash
+        , maybeQuery =
+            case data.query of
+                NoQuery ->
+                    Nothing
+
+                Query _ _ text ->
+                    Just text
+        }
+        option
 
 
 stringFromBool : Bool -> String
@@ -696,75 +726,6 @@ stringFromBool bool =
 
     else
         "false"
-
-
-viewEntry :
-    (OptionAttrs msg
-     ->
-        { selected : Bool
-        , focused : Bool
-        , hovered : Bool
-        , maybeQuery : Maybe String
-        }
-     -> a
-     -> node
-    )
-    -> Bool
-    -> Bool
-    -> Bool
-    -> Bool
-    ->
-        { uniqueId : a -> String
-        , focusable : Bool
-        , markActiveDescendant : Bool
-        }
-    -> Instance a msg
-    -> Query
-    -> a
-    -> node
-viewEntry viewOption multiSelectable focused hovered selected config instance query entry =
-    let
-        { uniqueId } =
-            config
-
-        { id, lift } =
-            instance
-
-        maybeQuery =
-            case query of
-                NoQuery ->
-                    Nothing
-
-                Query _ _ text ->
-                    Just text
-
-        hash =
-            uniqueId entry
-
-        ariaSelected =
-            if multiSelectable then
-                Just (stringFromBool selected)
-
-            else if selected then
-                Just "true"
-
-            else
-                Nothing
-    in
-    viewOption
-        { id = printEntryId id hash
-        , role = "option"
-        , ariaSelected = ariaSelected
-        , onMouseenter = lift (EntryMouseEntered hash)
-        , onMouseleave = lift EntryMouseLeft
-        , onClick = lift (EntryClicked entry)
-        }
-        { selected = selected
-        , focused = focused
-        , hovered = hovered
-        , maybeQuery = maybeQuery
-        }
-        entry
 
 
 listKeyPress : Bool -> String -> KeyInfo -> Decoder (Msg a)
@@ -870,69 +831,7 @@ listKeyPress fromOutside id { code, altDown, controlDown, metaDown, shiftDown } 
                 notHandlingThatKey
 
 
-{-| **Available view customizations**
-
-This is the second argument to `viewConfig`. You can customize the styling with
-the following fields:
-
-  - **ul**: A list of html attributes applied to the outer listbox.
-
-  - **liOption**: A function returning `HtmlDetails` for each option in your
-    entries list. It gets the actual option value `a` and flags telling you if
-    this option is currently `selected`, `focused` or `hovered`. If the user
-    typed in a query, you get this via the `maybeQuery` field.
-
-  - **liDivider**: This lets you style the divider list entries. It gets the
-    actual `divider` entry and returns `HtmlDetails`.
-
-  - **empty**: What should be rendered when the listbox is empty?
-
-  - **focusable**: Should the listbox be focusable?
-
-The DOM structure of a listbox will be something like this:
-
-    listbox =
-        Html.ul
-            [ ... ] -- ul attributes
-            [ Html.li
-                [ ... ] -- liDivider attributes
-                [ ... ] -- liDivider children
-            , Html.li
-                [ ... ] -- liOption attributes
-                [ ... ] -- liOption children
-            , ...
-            , Html.li
-                [ ... ] -- liOption attributes
-                [ ... ] -- liOption children
-            ]
-
-Provided you have specified some CSS classes, a view configuration could look
-like this:
-
-    views : Views String Never
-    views =
-        { ul = [ Html.Attributes.class "listbox__container" ]
-        , liOption =
-            \{ selected, focused } option ->
-                { attributes =
-                    [ Html.Attributes.class "listbox__option"
-                    , Html.Attributes.classList
-                        [ ( "listbox__option--selected"
-                          , selected
-                          )
-                        , ( "listbox__option--keyboardFocused"
-                          , focused
-                          )
-                        ]
-                    ]
-                , children =
-                    [ Html.text option ]
-                }
-        , liDivider = noDivider
-        , empty = Html.text ""
-        , focusable = True
-        }
-
+{-| Opaque type for providing view customization of the listbox widget.
 -}
 type Views a node msg
     = Views
@@ -950,11 +849,14 @@ type Views a node msg
         }
 
 
+{-| TODO
+-}
 type alias ListboxAttrs msg =
     { id : String
     , role : String
     , ariaMultiselectable : String
     , ariaLabelledby : Maybe String
+    , ariaLabel : Maybe String
     , ariaActivedescendant : Maybe String
     , tabindex : Maybe Int
     , preventDefaultOnKeydown : Decoder ( msg, Bool )
@@ -965,6 +867,8 @@ type alias ListboxAttrs msg =
     }
 
 
+{-| TODO
+-}
 type alias OptionAttrs msg =
     { id : String
     , role : String
@@ -975,7 +879,10 @@ type alias OptionAttrs msg =
     }
 
 
-{-| TODO
+{-| If you want to use other UI libraries like `rtfeldman/elm-css` or
+`mdgriffith/elm-ui` you have to generate Views using this function. Take a look
+at the implementation of `html` for a starting point. The `examples/` folder of
+the package repository contains an implementation for `mdgriffith/elm-ui`.
 -}
 custom :
     { listbox : ListboxAttrs msg -> { options : List node } -> node
@@ -995,7 +902,33 @@ custom =
     Views
 
 
-{-| TODO
+{-| Generate view customizations for the standard `elm/html` package. You can
+customize the styling with the following fields:
+
+  - **ul**: A list of html attributes applied to the outer listbox.
+
+  - **li**: A function returning `HtmlDetails` for each option in your
+    entries list. It gets the actual option value `a` and flags telling you if
+    this option is currently `selected`, `focused` or `hovered`. If the user
+    typed in a query, you get this via the `maybeQuery` field.
+
+The DOM structure of a listbox will be something like this:
+
+    listbox =
+        Html.ul
+            [ ... ] -- ul attributes
+            [ Html.li
+                [ ... ] -- liDivider attributes
+                [ ... ] -- liDivider children
+            , Html.li
+                [ ... ] -- liOption attributes
+                [ ... ] -- liOption children
+            , ...
+            , Html.li
+                [ ... ] -- liOption attributes
+                [ ... ] -- liOption children
+            ]
+
 -}
 html :
     { ul : List (Attribute msg)
@@ -1025,6 +958,14 @@ html config =
                             Just ariaLabelledby ->
                                 Attributes.attribute "aria-labelledby" ariaLabelledby :: htmlAttrs
 
+                    addAriaLabel htmlAttrs =
+                        case attrs.ariaLabel of
+                            Nothing ->
+                                htmlAttrs
+
+                            Just ariaLabel ->
+                                Attributes.attribute "aria-label" ariaLabel :: htmlAttrs
+
                     addAriaActivedescendant htmlAttrs =
                         case attrs.ariaActivedescendant of
                             Nothing ->
@@ -1053,6 +994,7 @@ html config =
                       , Events.onBlur attrs.onFocus
                       ]
                         |> addAriaLabelledBy
+                        |> addAriaLabel
                         |> addAriaActivedescendant
                         |> addTabindex
                      )
@@ -1099,12 +1041,14 @@ combinations. If you do not need to handle keydown events, just insert a failing
 
     view =
         Html.input
-            [ preventDefaultOnKeyDown
-                { id = "fruits-listbox"
-                , labelledBy = "fruits"
-                , lift = ListboxMsg
-                }
-                (Decode.fail "not handling this event here")
+            [ Html.Events.preventDefaultOn "keydown"
+                (preventDefaultOnKeyDown
+                    { id = "fruits-listbox"
+                    , labelledBy = "fruits"
+                    , lift = ListboxMsg
+                    }
+                    (Decode.fail "not handling this event here")
+                )
             ]
             []
 
@@ -1283,11 +1227,10 @@ listToMaybe listA =
 
 
 
----- UPDATE
+-- UPDATE
 
 
-{-| The listbox's message type.
--}
+{-| -}
 type Msg a
     = NoOp
     | BrowserReturnedDomInfoOption a (Result Dom.Error DomInfoOption)
@@ -1975,13 +1918,6 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
                     |> toggle a
 
 
-type alias DomInfoOptionInitial =
-    { viewportList : Dom.Viewport
-    , elementList : Dom.Element
-    , elementLi : Dom.Element
-    }
-
-
 focusPendingKeyboardFocus : Listbox -> Listbox
 focusPendingKeyboardFocus (Listbox listbox) =
     case listbox.focus of
@@ -2071,14 +2007,6 @@ or fallback default =
             default
 
 
-type alias DomInfoOption =
-    { viewportList : Dom.Viewport
-    , elementList : Dom.Element
-    , elementLi : Dom.Element
-    , elementPreviousLi : Dom.Element
-    }
-
-
 getViewportOfList : String -> Direction -> a -> Cmd (Msg a)
 getViewportOfList id direction option =
     Dom.getViewportOf (printListId id)
@@ -2137,6 +2065,21 @@ attemptToScrollToOption behaviour id hash maybePreviousHash =
 
 
 -- TASKS
+
+
+type alias DomInfoOptionInitial =
+    { viewportList : Dom.Viewport
+    , elementList : Dom.Element
+    , elementLi : Dom.Element
+    }
+
+
+type alias DomInfoOption =
+    { viewportList : Dom.Viewport
+    , elementList : Dom.Element
+    , elementLi : Dom.Element
+    , elementPreviousLi : Dom.Element
+    }
 
 
 getDomInfoOptionInitial : String -> String -> Task Dom.Error DomInfoOptionInitial
@@ -2248,7 +2191,7 @@ scrollToOption behaviour id entryDomData =
 
 
 
----- SUBSCRIPTIONS
+-- SUBSCRIPTIONS
 
 
 {-| Do not forget to add this to your subscriptions:
@@ -2460,7 +2403,7 @@ findNextHelp first uniqueId entries currentId =
 
 
 
----- RANGE
+-- RANGE
 
 
 range : (a -> String) -> List a -> String -> String -> List a
