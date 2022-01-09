@@ -5,8 +5,7 @@ module Listbox.Combobox exposing
     , UpdateConfig, updateConfig, Behaviour
     , ViewConfig, viewConfig, Role(..), Visibility(..), Views
     , customView
-    , DomFunctions
-    , CustomViewConfig, customViewConfig, CustomVisibility(..), CustomViews
+    , CustomViewConfig, customViewConfig, CustomVisibility(..)
     )
 
 {-| Implementation of the [combobox
@@ -56,9 +55,7 @@ example `rtfeldman/elm-css` or `mdgriffith/elm-ui`.
 
 @docs customView
 
-@docs DomFunctions
-
-@docs CustomViewConfig, customViewConfig, CustomVisibility, CustomViews
+@docs CustomViewConfig, customViewConfig, CustomVisibility
 
 -}
 
@@ -175,33 +172,9 @@ this combobox. For example:
         = ComboboxMsg Combobox.Msg
 
 -}
-view :
-    ViewConfig a
-    -> Instance a msg
-    -> List a
-    -> Combobox a
-    -> String
-    -> Html msg
+view : ViewConfig a -> Views a node msg -> Instance a msg -> List a -> Combobox a -> String -> node
 view config =
-    customView htmlFunctions (viewConfigToCustom config)
-
-
-htmlFunctions : DomFunctions (Attribute msg) (Attribute Never) (Html msg) (Html Never) msg
-htmlFunctions =
-    { div = Html.div
-    , text = Html.text
-    , input = Html.input
-    , ul = Html.ul
-    , li = Html.li
-    , on = Events.on
-    , onInput = Events.onInput
-    , preventDefaultOn = Events.preventDefaultOn
-    , property = Attributes.property
-    , attribute = Attributes.attribute
-    , style = Attributes.style
-    , attributeMap = \noOp -> Attributes.map (\_ -> noOp)
-    , htmlMap = \noOp -> Html.map (\_ -> noOp)
-    }
+    customView (viewConfigToCustom config)
 
 
 listboxId : Instance a msg -> String
@@ -487,7 +460,6 @@ type ViewConfig a
         { uniqueId : a -> String
         , role : Role
         , visibility : Visibility
-        , views : Views a
         }
 
 
@@ -506,7 +478,6 @@ viewConfig :
     { uniqueId : a -> String
     , role : Role
     , visibility : Visibility
-    , views : Views a
     }
     -> ViewConfig a
 viewConfig =
@@ -532,17 +503,13 @@ conditions are met:
 
 -}
 type Visibility
-    = Always (Html Never)
+    = Always
     | Sometimes
         { whenMatchingWithMinimalValueLength : Maybe Int
 
         --  TODO
         --, whenMatchingOnValueChange : Bool
-        , whenRequested :
-            Maybe
-                { checkValue : String -> Bool
-                , empty : Html Never
-                }
+        , whenRequested : Maybe { checkValue : String -> Bool }
         }
 
 
@@ -622,28 +589,78 @@ like this:
         }
 
 -}
-type alias Views a =
-    { container : HtmlAttributes
-    , input : HtmlAttributes
-    , ul : HtmlAttributes
-    , liOption :
-        { selected : Bool
-        , focused : Bool
-        , hovered : Bool
-        , maybeQuery : Maybe String
+type Views a node msg
+    = Views
+        { container :
+            ContainerAttrs msg
+            ->
+                { input : node
+                , listbox : Maybe node
+                }
+            -> node
+        , input : InputAttrs msg -> node
+        , listbox : ListboxAttrs msg -> { options : List node } -> node
+        , option :
+            OptionAttrs msg
+            ->
+                { selected : Bool
+                , focused : Bool
+                , hovered : Bool
+                , maybeQuery : Maybe String
+                }
+            -> a
+            -> node
         }
-        -> a
-        -> HtmlDetails
+
+
+type alias ContainerAttrs msg =
+    { role : String
+    , ariaExpanded : String
+    , onMouseDown : msg
+    , onMouseUp : msg
+    , onClick : Decoder msg
     }
 
 
-type alias HtmlAttributes =
-    List (Attribute Never)
+type alias InputAttrs msg =
+    { id : String
+    , type_ : String
+    , role : String
+    , ariaMultiline : String
+    , ariaAutocomplete : String
+    , value : String
+    , preventDefaultOnKeydown : Decoder ( msg, Bool )
+    , onInput : String -> msg
+    , onFocus : msg
+    , onBlur : msg
+    , ariaControls : Maybe String
+    , ariaLabelledby : Maybe String
+    , ariaActivedescendant : Maybe String
+    }
 
 
-type alias HtmlDetails =
-    { attributes : List (Attribute Never)
-    , children : List (Html Never)
+type alias ListboxAttrs msg =
+    { id : String
+    , role : String
+    , ariaMultiselectable : String
+    , ariaLabelledby : Maybe String
+    , ariaActivedescendant : Maybe String
+    , tabindex : Maybe Int
+    , preventDefaultOnKeydown : Decoder ( msg, Bool )
+    , onMousedown : msg
+    , onMouseup : msg
+    , onFocus : msg
+    , onBlur : msg
+    }
+
+
+type alias OptionAttrs msg =
+    { id : String
+    , role : String
+    , ariaSelected : Maybe String
+    , onMouseenter : msg
+    , onMouseleave : msg
+    , onClick : msg
     }
 
 
@@ -727,80 +744,12 @@ type alias Behaviour a =
 ---- CUSTOM DOM
 
 
-{-| This record holds all the DOM functions needed to render a listbox. It is
-probably instructive to look at the version for the standard `elm/html`
-package:
-
-    htmlFunctions : DomFunctions (Attribute msg) (Attribute Never) (Html msg) (Html Never) msg
-    htmlFunctions =
-        { div = Html.div
-        , text = Html.text
-        , input = Html.input
-        , ul = Html.ul
-        , li = Html.li
-        , on = Events.on
-        , onInput = Events.onInput
-        , preventDefaultOn = Events.preventDefaultOn
-        , property = Attributes.property
-        , attribute = Attributes.attribute
-        , style = Attributes.style
-        , attributeMap = \noOp -> Attributes.map (\_ -> noOp)
-        , htmlMap = \noOp -> Html.map (\_ -> noOp)
-        }
-
-When using `mdgriffith/elm-ui`, you could define something like this:
-
-    elementFunctions : DomFunctions (Attribute msg) (Attribute Never) (Element msg) (Element Never) msg
-    elementFunctions =
-        { div = Element.column
-        , text = Element.text
-        , input = TODO
-        , ul = Element.column
-        , li = Element.row
-        , on = Element.htmlAttribute (Events.on event decoder)
-        , onInput =
-            \tagger ->
-                Element.htmlAttribute (Events.onInput tagger)
-        , preventDefaultOn =
-            \event decoder ->
-                Element.htmlAttribute (Events.preventDefaultOn event decoder)
-        , property =
-            \name value -> Element.htmlAttribute (Attributes.property name value)
-        , attribute =
-            \name value ->
-                Element.htmlAttribute (Attributes.attribute name value)
-        , style =
-            \name value ->
-                Element.htmlAttribute (Attributes.style name value)
-        , attributeMap = \noOp -> Element.mapAttribute (\_ -> noOp)
-        , htmlMap = \noOp -> Element.map (\_ -> noOp)
-        }
-
--}
-type alias DomFunctions attribute attributeNever html htmlNever msg =
-    { div : List attribute -> List html -> html
-    , text : String -> htmlNever
-    , input : List attribute -> List html -> html
-    , ul : List attribute -> List html -> html
-    , li : List attribute -> List html -> html
-    , on : String -> Decoder msg -> attribute
-    , onInput : (String -> msg) -> attribute
-    , preventDefaultOn : String -> Decoder ( msg, Bool ) -> attribute
-    , property : String -> Value -> attribute
-    , attribute : String -> String -> attribute
-    , style : String -> String -> attributeNever
-    , attributeMap : msg -> attributeNever -> attribute
-    , htmlMap : msg -> htmlNever -> html
-    }
-
-
 {-| -}
-type CustomViewConfig a attributeNever htmlNever
+type CustomViewConfig a
     = CustomViewConfig
         { uniqueId : a -> String
         , role : Role
-        , visibility : CustomVisibility htmlNever
-        , views : CustomViews a attributeNever htmlNever
+        , visibility : CustomVisibility
         }
 
 
@@ -810,47 +759,39 @@ function.
 customViewConfig :
     { uniqueId : a -> String
     , role : Role
-    , visibility : CustomVisibility htmlNever
-    , views : CustomViews a attributeNever htmlNever
+    , visibility : CustomVisibility
     }
-    -> CustomViewConfig a attributeNever htmlNever
+    -> CustomViewConfig a
 customViewConfig =
     CustomViewConfig
 
 
-viewConfigToCustom :
-    ViewConfig a
-    -> CustomViewConfig a (Attribute Never) (Html Never)
+viewConfigToCustom : ViewConfig a -> CustomViewConfig a
 viewConfigToCustom (ViewConfig config) =
     CustomViewConfig
         { uniqueId = config.uniqueId
         , role = config.role
         , visibility = visibilityToCustom config.visibility
-        , views = config.views
         }
 
 
 {-| -}
-type CustomVisibility htmlNever
-    = CustomAlways htmlNever
+type CustomVisibility
+    = CustomAlways
     | CustomSometimes
         { whenMatchingWithMinimalValueLength : Maybe Int
 
         --  TODO
         --, whenMatchingOnValueChange : Bool
-        , whenRequested :
-            Maybe
-                { checkValue : String -> Bool
-                , empty : htmlNever
-                }
+        , whenRequested : Maybe { checkValue : String -> Bool }
         }
 
 
-visibilityToCustom : Visibility -> CustomVisibility (Html Never)
+visibilityToCustom : Visibility -> CustomVisibility
 visibilityToCustom visibility =
     case visibility of
-        Always empty ->
-            CustomAlways empty
+        Always ->
+            CustomAlways
 
         Sometimes conditions ->
             CustomSometimes
@@ -860,91 +801,53 @@ visibilityToCustom visibility =
                 }
 
 
-{-| A replacement for `Views` when you are using your own `customView`
-function. Take a look at its documentation for a description of each field.
--}
-type alias CustomViews a attributeNever htmlNever =
-    { container : DomAttributes attributeNever
-    , input : DomAttributes attributeNever
-    , ul : DomAttributes attributeNever
-    , liOption :
-        { selected : Bool
-        , focused : Bool
-        , hovered : Bool
-        , maybeQuery : Maybe String
-        }
-        -> a
-        -> DomDetails attributeNever htmlNever
-    }
-
-
-type alias DomAttributes attributeNever =
-    List attributeNever
-
-
-type alias DomDetails attributeNever htmlNever =
-    { attributes : List attributeNever
-    , children : List htmlNever
-    }
-
-
 {-| Create a customized view function for the DOM library of your choice by
 providing some `DomFunctions`.
 -}
 customView :
-    DomFunctions attribute attributeNever html htmlNever msg
-    -> CustomViewConfig a attributeNever htmlNever
+    CustomViewConfig a
+    -> Views a node msg
     -> Instance a msg
     -> List a
     -> Combobox a
     -> String
-    -> html
-customView dom (CustomViewConfig config) instance entries (Combobox data) value =
+    -> node
+customView (CustomViewConfig config) (Views views) instance entries (Combobox data) value =
     let
-        addAriaControls attrs =
+        ariaControls =
             if isOpen then
-                dom.attribute "aria-controls" (listboxId instance) :: attrs
+                Just (listboxId instance)
 
             else
-                attrs
+                Nothing
 
-        addAriaLabelledBy attrs =
+        ariaLabelledby =
             case instance.label of
                 LabelledBy id ->
-                    dom.attribute "aria-labelledby" id :: attrs
+                    Just id
 
-                Label id ->
-                    dom.attribute "aria-label" id :: attrs
+                Label _ ->
+                    Nothing
 
                 NoLabel ->
-                    attrs
+                    Nothing
 
-        addAriaActivedescendant attrs =
-            case
-                Listbox.customFocusedEntryId listboxViewConfig
-                    listboxInstance
-                    entries
-                    data.listbox
-            of
-                Nothing ->
-                    attrs
+        ariaLabel =
+            case instance.label of
+                LabelledBy _ ->
+                    Nothing
 
-                Just id ->
-                    dom.attribute "aria-activedescendant" id :: attrs
+                Label id ->
+                    Just id
 
-        listboxDom =
-            { ul = dom.ul
-            , li = dom.li
-            , property = dom.property
-            , attribute = dom.attribute
-            , on = dom.on
-            , preventDefaultOn = dom.preventDefaultOn
-            , attributeMap = dom.attributeMap
-            , htmlMap = dom.htmlMap
-            }
+                NoLabel ->
+                    Nothing
+
+        ariaActivedescendant =
+            Listbox.focusedEntryId listboxViewConfig listboxInstance entries data.listbox
 
         listboxViewConfig =
-            Listbox.customViewConfig
+            Listbox.viewConfig
                 { uniqueId = config.uniqueId
                 , focusable = False
                 , markActiveDescendant = False
@@ -964,16 +867,16 @@ customView dom (CustomViewConfig config) instance entries (Combobox data) value 
 
         popup =
             case config.visibility of
-                CustomAlways empty ->
+                CustomAlways ->
                     if data.focused && not data.closeRequested then
                         if List.isEmpty entries then
-                            dom.htmlMap (instance.lift NoOp) empty
+                            Nothing
 
                         else
-                            listbox
+                            Just listbox
 
                     else
-                        dom.htmlMap (instance.lift NoOp) empty
+                        Nothing
 
                 CustomSometimes conditions ->
                     if
@@ -987,14 +890,14 @@ customView dom (CustomViewConfig config) instance entries (Combobox data) value 
                                     && data.focused
                                     && not data.closeRequested
                     then
-                        listbox
+                        Just listbox
 
                     else
                         case conditions.whenRequested of
                             Nothing ->
-                                dom.htmlMap (instance.lift NoOp) (dom.text "")
+                                Nothing
 
-                            Just { checkValue, empty } ->
+                            Just { checkValue } ->
                                 if
                                     checkValue value
                                         && data.showRequested
@@ -1002,45 +905,48 @@ customView dom (CustomViewConfig config) instance entries (Combobox data) value 
                                         && not data.closeRequested
                                 then
                                     if List.isEmpty entries then
-                                        dom.htmlMap (instance.lift NoOp) empty
+                                        Nothing
 
                                     else
-                                        listbox
+                                        Just listbox
 
                                 else
-                                    dom.htmlMap (instance.lift NoOp) (dom.text "")
+                                    Nothing
 
         listbox =
-            Listbox.customViewUnique listboxDom
-                { ul =
-                    if isOpen then
-                        dom.style "position" "absolute" :: config.views.ul
+            Listbox.viewUnique
+                (Listbox.custom
+                    { listbox = views.listbox
+                    , option = views.option
 
-                    else
-                        dom.style "display" "none"
-                            :: dom.style "position" "absolute"
-                            :: config.views.ul
-                , liOption = config.views.liOption
-                , empty = dom.text ""
-                }
+                    -- TODO move to html Views
+                    --ul =
+                    --    if isOpen then
+                    --        dom.style "position" "absolute" :: config.views.ul
+                    --    else
+                    --        dom.style "display" "none"
+                    --            :: dom.style "position" "absolute"
+                    --            :: config.views.ul
+                    }
+                )
                 listboxViewConfig
                 listboxInstance
                 entries
                 data.listbox
                 data.selection
     in
-    dom.div
-        ([ dom.attribute "role" "combobox"
-         , dom.attribute "aria-expanded" <|
+    views.container
+        { role = " combobox"
+        , ariaExpanded =
             if isOpen then
                 "true"
 
             else
                 "false"
-         , dom.on "mousedown" (Decode.succeed (instance.lift ListboxMousePressed))
-         , dom.on "mouseup" (Decode.succeed (instance.lift ListboxMouseReleased))
-         , dom.on "click"
-            (Decode.at [ "target", "id" ] Decode.string
+        , onMouseDown = instance.lift ListboxMousePressed
+        , onMouseUp = instance.lift ListboxMouseReleased
+        , onClick =
+            Decode.at [ "target", "id" ] Decode.string
                 |> Decode.andThen
                     (\targetId ->
                         if targetId == inputId instance then
@@ -1049,133 +955,122 @@ customView dom (CustomViewConfig config) instance entries (Combobox data) value 
                         else
                             Decode.succeed (instance.lift ListboxMouseClicked)
                     )
-            )
-         ]
-            |> appendAttributes (dom.attributeMap (instance.lift NoOp)) config.views.container
-        )
-        [ dom.input
-            ([ dom.property "id" (Encode.string (inputId instance))
-             , dom.property "type" (Encode.string "text")
-             , dom.attribute "role" <|
-                case config.role of
-                    Textbox ->
-                        "textbox"
+        }
+        { input =
+            views.input
+                { id = inputId instance
+                , type_ = "text"
+                , role =
+                    case config.role of
+                        Textbox ->
+                            "textbox"
 
-                    Searchbox ->
-                        "searchbox"
-             , dom.attribute "aria-multiline" "false"
-             , dom.attribute "aria-autocomplete" <|
-                case config.visibility of
-                    CustomAlways _ ->
-                        "none"
+                        Searchbox ->
+                            "searchbox"
+                , ariaMultiline = "false"
+                , ariaAutocomplete =
+                    case config.visibility of
+                        CustomAlways ->
+                            "none"
 
-                    CustomSometimes _ ->
-                        "list"
-             , dom.property "value" (Encode.string value)
-             , Listbox.customPreventDefaultOnKeyDown dom.preventDefaultOn
-                listboxInstance
-                (KeyInfo.decoder
-                    |> Decode.andThen
-                        (\keyInfo ->
-                            case keyInfo.code of
-                                "ArrowUp" ->
-                                    if
-                                        keyInfo.altDown
-                                            && not
-                                                (keyInfo.controlDown
-                                                    || keyInfo.metaDown
-                                                    || keyInfo.shiftDown
+                        CustomSometimes _ ->
+                            "list"
+                , value = value
+                , preventDefaultOnKeydown =
+                    Listbox.preventDefaultOnKeyDown listboxInstance
+                        (KeyInfo.decoder
+                            |> Decode.andThen
+                                (\keyInfo ->
+                                    case keyInfo.code of
+                                        "ArrowUp" ->
+                                            if
+                                                keyInfo.altDown
+                                                    && not
+                                                        (keyInfo.controlDown
+                                                            || keyInfo.metaDown
+                                                            || keyInfo.shiftDown
+                                                        )
+                                            then
+                                                -- TODO: this may not work in some
+                                                -- browsers/on some platforms, due to
+                                                -- https://github.com/elm/html/issues/180
+                                                Decode.succeed
+                                                    ( instance.lift
+                                                        (InputAltArrowUpPressed isOpen)
+                                                    , True
+                                                    )
+
+                                            else
+                                                Decode.fail "not handling that key here"
+
+                                        "ArrowDown" ->
+                                            if
+                                                keyInfo.altDown
+                                                    && not
+                                                        (keyInfo.controlDown
+                                                            || keyInfo.metaDown
+                                                            || keyInfo.shiftDown
+                                                        )
+                                            then
+                                                Decode.succeed
+                                                    ( instance.lift InputAltArrowDownPressed
+                                                    , True
+                                                    )
+
+                                            else
+                                                Decode.fail "not handling that key here"
+
+                                        "Escape" ->
+                                            Decode.succeed
+                                                ( instance.lift InputEscapePressed
+                                                , True
                                                 )
-                                    then
-                                        -- TODO: this may not work in some
-                                        -- browsers/on some platforms, due to
-                                        -- https://github.com/elm/html/issues/180
-                                        Decode.succeed
-                                            ( instance.lift
-                                                (InputAltArrowUpPressed isOpen)
-                                            , True
-                                            )
 
-                                    else
-                                        Decode.fail "not handling that key here"
-
-                                "ArrowDown" ->
-                                    if
-                                        keyInfo.altDown
-                                            && not
-                                                (keyInfo.controlDown
-                                                    || keyInfo.metaDown
-                                                    || keyInfo.shiftDown
+                                        "Enter" ->
+                                            Decode.succeed
+                                                ( instance.lift InputEnterPressed
+                                                , True
                                                 )
-                                    then
-                                        Decode.succeed
-                                            ( instance.lift InputAltArrowDownPressed
-                                            , True
-                                            )
 
-                                    else
-                                        Decode.fail "not handling that key here"
+                                        "Alt" ->
+                                            Decode.fail "not handling that key here"
 
-                                "Escape" ->
-                                    Decode.succeed
-                                        ( instance.lift InputEscapePressed
-                                        , True
-                                        )
+                                        "Control" ->
+                                            Decode.fail "not handling that key here"
 
-                                "Enter" ->
-                                    Decode.succeed
-                                        ( instance.lift InputEnterPressed
-                                        , True
-                                        )
+                                        "Meta" ->
+                                            Decode.fail "not handling that key here"
 
-                                "Alt" ->
-                                    Decode.fail "not handling that key here"
+                                        "Shift" ->
+                                            Decode.fail "not handling that key here"
 
-                                "Control" ->
-                                    Decode.fail "not handling that key here"
-
-                                "Meta" ->
-                                    Decode.fail "not handling that key here"
-
-                                "Shift" ->
-                                    Decode.fail "not handling that key here"
-
-                                _ ->
-                                    Decode.succeed
-                                        ( instance.lift InputOtherKeyPressed
-                                        , False
-                                        )
+                                        _ ->
+                                            Decode.succeed
+                                                ( instance.lift InputOtherKeyPressed
+                                                , False
+                                                )
+                                )
                         )
-                )
-             , dom.onInput (instance.lift << ValueChanged)
-             , dom.on "focus" (Decode.succeed (instance.lift InputFocused))
-             , dom.on "blur" (Decode.succeed (instance.lift InputBlured))
-             ]
-                |> addAriaControls
-                |> addAriaLabelledBy
-                |> addAriaActivedescendant
-                |> appendAttributes (dom.attributeMap (instance.lift NoOp)) config.views.input
-            )
-            []
-        , popup
-        ]
+                , onInput = instance.lift << ValueChanged
+                , onFocus = instance.lift InputFocused
+                , onBlur = instance.lift InputBlured
+                , ariaControls = ariaControls
+                , ariaLabelledby = ariaLabelledby
+                , ariaActivedescendant = ariaActivedescendant
+                }
+        , listbox = popup
+        }
 
 
 
 ---- HELPER
 
 
-open :
-    CustomVisibility htmlNever
-    -> ComboboxData a
-    -> List a
-    -> String
-    -> Bool
+open : CustomVisibility -> ComboboxData a -> List a -> String -> Bool
 open visibility data entries value =
     case visibility of
-        CustomAlways empty ->
-            data.focused
-                && not data.closeRequested
+        CustomAlways ->
+            data.focused && not data.closeRequested
 
         CustomSometimes conditions ->
             (case conditions.whenMatchingWithMinimalValueLength of
@@ -1192,7 +1087,7 @@ open visibility data entries value =
                         Nothing ->
                             False
 
-                        Just { checkValue, empty } ->
+                        Just { checkValue } ->
                             checkValue value
                                 && data.showRequested
                                 && data.focused
