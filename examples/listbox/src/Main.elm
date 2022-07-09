@@ -24,12 +24,7 @@ import Html exposing (Html)
 import Html.Attributes as Attributes
 import Html.Events as Events
 import Html.Lazy as Html
-import Listbox as Listbox
-    exposing
-        ( Entry
-        , HtmlDetails
-        , Listbox
-        )
+import Listbox exposing (Listbox)
 
 
 main : Program {} Model Msg
@@ -79,7 +74,18 @@ update msg model =
         ListboxMsg listboxMsg ->
             let
                 ( newListbox, listboxCmd, newSelection ) =
-                    Listbox.update updateConfig
+                    Listbox.update
+                        { uniqueId = identity
+                        , behaviour =
+                            { jumpAtEnds = True
+                            , separateFocus = True
+                            , selectionFollowsFocus = False
+                            , handleHomeAndEnd = True
+                            , typeAhead = Listbox.simpleTypeAhead 200 identity
+                            , minimalGap = 20
+                            , initialGap = 200
+                            }
+                        }
                         fruits
                         listboxMsg
                         model.listbox
@@ -117,7 +123,11 @@ view model =
                     [ Html.text "Fruits" ]
                 , Html.div
                     [ Attributes.class "control" ]
-                    [ Listbox.view viewConfig
+                    [ Listbox.view views
+                        { focusable = True
+                        , markActiveDescendant = True
+                        , uniqueId = identity
+                        }
                         { id = "fruits"
                         , label = Listbox.labelledBy "fruits-label"
                         , lift = ListboxMsg
@@ -144,68 +154,45 @@ view model =
 ---- CONFIG
 
 
-updateConfig : Listbox.UpdateConfig String
-updateConfig =
-    Listbox.updateConfig
-        { uniqueId = identity
-        , behaviour =
-            { jumpAtEnds = True
-            , separateFocus = True
-            , selectionFollowsFocus = False
-            , handleHomeAndEnd = True
-            , typeAhead = Listbox.simpleTypeAhead 200 identity
-            , minimalGap = 20
-            , initialGap = 200
-            }
-        }
-
-
-viewConfig : Listbox.ViewConfig String Never
-viewConfig =
-    Listbox.viewConfig
-        { uniqueId = identity
-        , views =
-            { ul = [ Attributes.class "list" ]
-            , liOption =
-                \{ selected, focused, hovered, maybeQuery } name ->
-                    { attributes =
-                        [ Attributes.class "entry"
-                        , Attributes.classList
-                            [ ( "entry--mouse-focused", hovered )
-                            , ( "entry--keyboard-focused", focused )
-                            ]
+views : Listbox.Views String (Html msg) msg
+views =
+    Listbox.html
+        { ul = [ Attributes.class "list" ]
+        , li =
+            \{ selected, focused, hovered, maybeQuery } name ->
+                { attributes =
+                    [ Attributes.class "entry"
+                    , Attributes.classList
+                        [ ( "entry--mouse-focused", hovered )
+                        , ( "entry--keyboard-focused", focused )
                         ]
-                    , children =
-                        Html.span
-                            [ Attributes.class "icon"
-                            , Attributes.class "is-small"
-                            , Attributes.style "margin-right" "8px"
-                            , Attributes.style "margin-left" "8px"
-                            , Attributes.style "font-size" "12px"
-                            , Attributes.style "width" "16px"
-                            , Widget.hidden True
-                            ]
-                            [ if selected then
-                                Html.i
-                                    [ Attributes.class "fas"
-                                    , Attributes.class "fa-check"
-                                    ]
-                                    []
+                    ]
+                , children =
+                    Html.span
+                        [ Attributes.class "icon"
+                        , Attributes.class "is-small"
+                        , Attributes.style "margin-right" "8px"
+                        , Attributes.style "margin-left" "8px"
+                        , Attributes.style "font-size" "12px"
+                        , Attributes.style "width" "16px"
+                        , Widget.hidden True
+                        ]
+                        [ if selected then
+                            Html.i
+                                [ Attributes.class "fas"
+                                , Attributes.class "fa-check"
+                                ]
+                                []
 
-                              else
-                                Html.text ""
-                            ]
-                            :: liChildren maybeQuery name
-                    }
-            , liDivider = Listbox.noDivider
-            , empty = Html.div [] [ Html.text "this list is empty" ]
-            , focusable = True
-            , markActiveDescendant = True
-            }
+                          else
+                            Html.text ""
+                        ]
+                        :: liChildren maybeQuery name
+                }
         }
 
 
-liChildren : Maybe String -> String -> List (Html Never)
+liChildren : Maybe String -> String -> List (Html msg)
 liChildren maybeQuery name =
     case maybeQuery of
         Nothing ->
@@ -243,97 +230,96 @@ liChildren maybeQuery name =
 ---- DATA
 
 
-fruits : List (Entry String divider)
+fruits : List String
 fruits =
-    List.map Listbox.option
-        [ "Açaí"
-        , "Apple"
-        , "Akee"
-        , "Apricot"
-        , "Avocado"
-        , "Banana"
-        , "Bilberry"
-        , "Blackberry"
-        , "Blackcurrant"
-        , "Black sapote"
-        , "Blueberry"
-        , "Boysenberry"
-        , "Buddha's hand (fingered citron)"
-        , "Crab apples"
-        , "Currant"
-        , "Cherry"
-        , "Cherimoya (Custard Apple)"
-        , "Chico fruit"
-        , "Cloudberry"
-        , "Coconut"
-        , "Cranberry"
-        , "Cucumber"
-        , "Damson"
-        , "Date"
-        , "Dragonfruit (or Pitaya)"
-        , "Durian"
-        , "Elderberry"
-        , "Feijoa"
-        , "Fig"
-        , "Goji berry"
-        , "Gooseberry"
-        , "Grape"
-        , "Grapefruit"
-        , "Guava"
-        , "Honeyberry"
-        , "Huckleberry"
-        , "Jabuticaba"
-        , "Jackfruit"
-        , "Jambul"
-        , "Japanese plum"
-        , "Jostaberry"
-        , "Jujube"
-        , "Juniper berry"
-        , "Kiwano (horned melon)"
-        , "Kiwifruit"
-        , "Kumquat"
-        , "Lemon"
-        , "Lime"
-        , "Loquat"
-        , "Longan"
-        , "Lychee"
-        , "Mango"
-        , "Mangosteen"
-        , "Marionberry"
-        , "Melon"
-        , "Miracle fruit"
-        , "Mulberry"
-        , "Nectarine"
-        , "Nance"
-        , "Olive"
-        , "Orange"
-        , "Papaya"
-        , "Passionfruit"
-        , "Peach"
-        , "Pear"
-        , "Persimmon"
-        , "Plantain"
-        , "Plum"
-        , "Pineapple"
-        , "Pineberry"
-        , "Plumcot (or Pluot)"
-        , "Pomegranate"
-        , "Pomelo"
-        , "Purple mangosteen"
-        , "Quince"
-        , "Raspberry"
-        , "Rambutan (or Mamin Chino)"
-        , "Redcurrant"
-        , "Salal berry"
-        , "Salak"
-        , "Satsuma"
-        , "Soursop"
-        , "Star apple"
-        , "Star fruit"
-        , "Strawberry"
-        , "Surinam cherry"
-        , "Tamarillo"
-        , "Tamarind"
-        , "Ugli fruit"
-        , "Yuzu"
-        ]
+    [ "Açaí"
+    , "Apple"
+    , "Akee"
+    , "Apricot"
+    , "Avocado"
+    , "Banana"
+    , "Bilberry"
+    , "Blackberry"
+    , "Blackcurrant"
+    , "Black sapote"
+    , "Blueberry"
+    , "Boysenberry"
+    , "Buddha's hand (fingered citron)"
+    , "Crab apples"
+    , "Currant"
+    , "Cherry"
+    , "Cherimoya (Custard Apple)"
+    , "Chico fruit"
+    , "Cloudberry"
+    , "Coconut"
+    , "Cranberry"
+    , "Cucumber"
+    , "Damson"
+    , "Date"
+    , "Dragonfruit (or Pitaya)"
+    , "Durian"
+    , "Elderberry"
+    , "Feijoa"
+    , "Fig"
+    , "Goji berry"
+    , "Gooseberry"
+    , "Grape"
+    , "Grapefruit"
+    , "Guava"
+    , "Honeyberry"
+    , "Huckleberry"
+    , "Jabuticaba"
+    , "Jackfruit"
+    , "Jambul"
+    , "Japanese plum"
+    , "Jostaberry"
+    , "Jujube"
+    , "Juniper berry"
+    , "Kiwano (horned melon)"
+    , "Kiwifruit"
+    , "Kumquat"
+    , "Lemon"
+    , "Lime"
+    , "Loquat"
+    , "Longan"
+    , "Lychee"
+    , "Mango"
+    , "Mangosteen"
+    , "Marionberry"
+    , "Melon"
+    , "Miracle fruit"
+    , "Mulberry"
+    , "Nectarine"
+    , "Nance"
+    , "Olive"
+    , "Orange"
+    , "Papaya"
+    , "Passionfruit"
+    , "Peach"
+    , "Pear"
+    , "Persimmon"
+    , "Plantain"
+    , "Plum"
+    , "Pineapple"
+    , "Pineberry"
+    , "Plumcot (or Pluot)"
+    , "Pomegranate"
+    , "Pomelo"
+    , "Purple mangosteen"
+    , "Quince"
+    , "Raspberry"
+    , "Rambutan (or Mamin Chino)"
+    , "Redcurrant"
+    , "Salal berry"
+    , "Salak"
+    , "Satsuma"
+    , "Soursop"
+    , "Star apple"
+    , "Star fruit"
+    , "Strawberry"
+    , "Surinam cherry"
+    , "Tamarillo"
+    , "Tamarind"
+    , "Ugli fruit"
+    , "Yuzu"
+    ]
