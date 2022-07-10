@@ -122,6 +122,10 @@ import Task exposing (Task)
 import Time exposing (Posix)
 
 
+
+---- MODEL
+
+
 {-| Tracks the keyboard and mouse focus as well as the current query. The full
 list of entries and the currently selected option(s) live in your own model.
 -}
@@ -156,19 +160,6 @@ type Focus
         }
 
 
-currentFocus : Focus -> Maybe String
-currentFocus theFocus =
-    case theFocus of
-        NoFocus ->
-            Nothing
-
-        Focus current ->
-            Just current
-
-        Pending { current } ->
-            Just current
-
-
 {-| An initial listbox with no option focused.
 -}
 init : Listbox
@@ -180,18 +171,6 @@ init =
         , hover = Nothing
         , maybeLastSelectedEntry = Nothing
         }
-
-
-
----- EXTERNAL STATE MANIPULATION
-
-
-{-| A task to give the listbox focus. The first argument must match the
-`Instance` used in the `view` function!
--}
-focus : Instance a msg -> Task Dom.Error ()
-focus { id } =
-    Dom.focus (printListId id)
 
 
 {-| Returns the option which currently has keyboard focus.
@@ -208,170 +187,42 @@ hoveredEntry uniqueId allEntries (Listbox listbox) =
     Maybe.andThen (find uniqueId allEntries) listbox.hover
 
 
-{-| Sets the keyboard focus to the provided options.
+currentFocus : Focus -> Maybe String
+currentFocus theFocus =
+    case theFocus of
+        NoFocus ->
+            Nothing
 
-**Note**: This will not adjust the scroll position of the listbox, so you might
-want to apply `scrollToFocus` afterwards.
+        Focus current ->
+            Just current
 
+        Pending { current } ->
+            Just current
+
+
+{-| Returns the HTML id of the currently focused entry.
 -}
-focusEntry :
+focusedEntryId :
     { uniqueId : a -> String
-    , behaviour : Behaviour a
+    , focusable : Bool
+    , markActiveDescendant : Bool
     }
-    -> a
-    -> Listbox
-    -> List a
-    -> ( Listbox, List a )
-focusEntry config newEntry (Listbox listbox) selection =
-    ( Listbox
-        { listbox
-            | query = NoQuery
-            , focus = Focus (config.uniqueId newEntry)
-        }
-    , if config.behaviour.selectionFollowsFocus then
-        [ newEntry ]
-
-      else
-        selection
-    )
-
-
-{-| Sets the keyboard focus to the next option. If `jumpAtEnds` is true and the
-focus is already on the last option, the first option is selected.
-
-**Note**: This will not adjust the scroll position of the listbox, so you might
-want to apply `scrollToFocus` afterwards.
-
--}
-focusNextOrFirstEntry :
-    { uniqueId : a -> String
-    , behaviour : Behaviour a
-    }
+    -> Instance a msg
     -> List a
     -> Listbox
-    -> List a
-    -> ( Listbox, List a )
-focusNextOrFirstEntry config allEntries (Listbox listbox) selection =
-    let
-        { uniqueId, behaviour } =
-            config
+    -> Maybe String
+focusedEntryId config instance entries (Listbox listbox) =
+    case listbox.focus of
+        NoFocus ->
+            Nothing
 
-        maybeA =
-            case currentFocus listbox.focus of
-                Nothing ->
-                    List.head allEntries
+        Focus current ->
+            find config.uniqueId entries current
+                |> Maybe.map (printEntryId instance.id << config.uniqueId)
 
-                Just hash ->
-                    case findNext uniqueId allEntries hash of
-                        Just (First a) ->
-                            if behaviour.jumpAtEnds then
-                                Just a
-
-                            else
-                                Nothing
-
-                        Just (Next a) ->
-                            Just a
-
-                        Nothing ->
-                            Nothing
-    in
-    case maybeA of
-        Nothing ->
-            ( Listbox listbox, selection )
-
-        Just a ->
-            let
-                newListbox =
-                    Listbox { listbox | focus = Focus (uniqueId a) }
-            in
-            if behaviour.selectionFollowsFocus then
-                ( newListbox
-                , [ a ]
-                )
-
-            else
-                ( newListbox
-                , selection
-                )
-
-
-{-| Sets the keyboard focus to the previous option. If `jumpAtEnds` is true and the
-focus is already on the first option, the first option is selected.
-
-**Note**: This will not adjust the scroll position of the listbox, so you might
-want to apply `scrollToFocus` afterwards.
-
--}
-focusPreviousOrFirstEntry :
-    { uniqueId : a -> String
-    , behaviour : Behaviour a
-    }
-    -> List a
-    -> Listbox
-    -> List a
-    -> ( Listbox, List a )
-focusPreviousOrFirstEntry config allEntries (Listbox listbox) selection =
-    let
-        { uniqueId, behaviour } =
-            config
-
-        maybeA =
-            case currentFocus listbox.focus of
-                Nothing ->
-                    List.head allEntries
-
-                Just hash ->
-                    case findPrevious uniqueId allEntries hash of
-                        Just (Last a) ->
-                            if behaviour.jumpAtEnds then
-                                Just a
-
-                            else
-                                Nothing
-
-                        Just (Previous a) ->
-                            Just a
-
-                        Nothing ->
-                            Nothing
-    in
-    case maybeA of
-        Nothing ->
-            ( Listbox listbox, selection )
-
-        Just a ->
-            let
-                newListbox =
-                    Listbox { listbox | focus = Focus (uniqueId a) }
-            in
-            if behaviour.selectionFollowsFocus then
-                ( newListbox
-                , [ a ]
-                )
-
-            else
-                ( newListbox
-                , selection
-                )
-
-
-{-| A command adjusting the scroll position of the listbox such that the
-current keyboard focus is visible.
--}
-scrollToFocus : Behaviour a -> Instance a msg -> Listbox -> Cmd msg
-scrollToFocus behaviour { id, lift } (Listbox listbox) =
-    Cmd.map lift
-        (case listbox.focus of
-            NoFocus ->
-                Cmd.none
-
-            Focus current ->
-                attemptToScrollToOption behaviour id current Nothing
-
-            Pending { current } ->
-                attemptToScrollToOption behaviour id current Nothing
-        )
+        Pending { current } ->
+            find config.uniqueId entries current
+                |> Maybe.map (printEntryId instance.id << config.uniqueId)
 
 
 
@@ -483,752 +334,7 @@ typeAhead =
 
 
 
----- VIEW
-
-
-{-| To make a listbox unique in your application you have to provide this
-information to the `view` function:
-
-  - **id**: The unique id of the listbox.
-
-  - **label**: Specify how the listbox is labelled. See `Label` for
-    possible options.
-
-  - **lift**: Your message type constructor wrapping the listbox `Msg`'s.
-
--}
-type alias Instance a msg =
-    { id : String
-    , label : Label
-    , lift : Msg a -> msg
-    }
-
-
-{-| There are three possibilities to label a listbox: it can be
-`labelledBy` by another DOM element with the given id, it can provide its own
-`label`, or it can have `noLabel` at all.
-
-The last case is only allowed when the listbox is part of another widget which
-itself is labelled.
-
--}
-type alias Label =
-    Internal.Label
-
-
-{-| -}
-labelledBy : String -> Label
-labelledBy =
-    Internal.LabelledBy
-
-
-{-| -}
-label : String -> Label
-label =
-    Internal.Label
-
-
-{-| -}
-noLabel : Label
-noLabel =
-    Internal.NoLabel
-
-
-{-| Take a list of all entries and a list of selected options and display it as
-a listbox. You have to provide a `ViewConfig` for the styling and an `Instance`
-to uniquely identify this listbox. For example:
-
-    view : Listbox -> List String -> Html Msg
-    view listbox selection =
-        Html.div []
-            [ Listbox.view viewConfig
-                { id = "fruits-listbox"
-                , label = label "fruits"
-                , lift = ListboxMsg
-                }
-                fruits
-                listbox
-                selection
-            ]
-
-    fruits : List (Entry String divider)
-    fruits =
-        List.map Listbox.option
-            [ "Apple", "Banana", "Cherry" ]
-
-    type Msg
-        = ListboxMsg Listbox.Msg
-
-You can provide the following options:
-
-  - **uniqueId**: A hash function for the entries.
-
-  - **focusable**: Should the listbox be focusable?
-
--}
-view :
-    Views a node msg
-    ->
-        { uniqueId : a -> String
-        , focusable : Bool
-        , markActiveDescendant : Bool
-        }
-    -> Instance a msg
-    -> List a
-    -> Listbox
-    -> List a
-    -> node
-view =
-    viewHelp True
-
-
-viewHelp :
-    Bool
-    -> Views a node msg
-    ->
-        { uniqueId : a -> String
-        , focusable : Bool
-        , markActiveDescendant : Bool
-        }
-    -> Instance a msg
-    -> List a
-    -> Listbox
-    -> List a
-    -> node
-viewHelp multiSelectable (Views views) config instance allEntries (Listbox data) selection =
-    views.listbox
-        { id = printListId instance.id
-        , role = "listbox"
-        , ariaMultiselectable = stringFromBool multiSelectable
-        , ariaLabelledby =
-            case instance.label of
-                LabelledBy id ->
-                    Just id
-
-                Label _ ->
-                    Nothing
-
-                NoLabel ->
-                    Nothing
-        , ariaLabel =
-            case instance.label of
-                LabelledBy _ ->
-                    Nothing
-
-                Label theLabel ->
-                    Just theLabel
-
-                NoLabel ->
-                    Nothing
-        , ariaActivedescendant =
-            if config.markActiveDescendant then
-                currentFocus data.focus
-                    |> Maybe.andThen (find config.uniqueId allEntries)
-                    |> Maybe.map (config.uniqueId >> printEntryId instance.id)
-
-            else
-                Nothing
-        , tabindex =
-            if config.focusable then
-                Just 0
-
-            else
-                Nothing
-        , preventDefaultOnKeydown =
-            Decode.andThen
-                (listKeyPress False instance.id
-                    >> Decode.map (\msg -> ( instance.lift msg, True ))
-                )
-                KeyInfo.decoder
-        , onMousedown = instance.lift ListMouseDown
-        , onMouseup = instance.lift ListMouseUp
-        , onFocus = instance.lift (ListFocused instance.id)
-        , onBlur = instance.lift ListBlured
-        }
-        { options =
-            List.map (viewOption multiSelectable views.option config instance selection data)
-                allEntries
-        }
-
-
-viewOption :
-    Bool
-    ->
-        (OptionAttrs msg
-         ->
-            { selected : Bool
-            , focused : Bool
-            , hovered : Bool
-            , maybeQuery : Maybe String
-            }
-         -> a
-         -> node
-        )
-    ->
-        { uniqueId : a -> String
-        , focusable : Bool
-        , markActiveDescendant : Bool
-        }
-    -> Instance a msg
-    -> List a
-    -> Data
-    -> a
-    -> node
-viewOption multiSelectable toNode config instance selection data option =
-    let
-        maybeHash =
-            Just (config.uniqueId option)
-
-        selected =
-            List.any ((==) option) selection
-
-        hash =
-            config.uniqueId option
-    in
-    toNode
-        { id = printEntryId instance.id hash
-        , role = "option"
-        , ariaSelected =
-            if multiSelectable then
-                Just (stringFromBool selected)
-
-            else if selected then
-                Just "true"
-
-            else
-                Nothing
-        , onMouseenter = instance.lift (EntryMouseEntered hash)
-        , onMouseleave = instance.lift EntryMouseLeft
-        , onClick = instance.lift (EntryClicked option)
-        }
-        { selected = selected
-        , focused = currentFocus data.focus == maybeHash
-        , hovered = data.hover == maybeHash
-        , maybeQuery =
-            case data.query of
-                NoQuery ->
-                    Nothing
-
-                Query _ _ text ->
-                    Just text
-        }
-        option
-
-
-stringFromBool : Bool -> String
-stringFromBool bool =
-    if bool then
-        "true"
-
-    else
-        "false"
-
-
-listKeyPress : Bool -> String -> KeyInfo -> Decoder (Msg a)
-listKeyPress fromOutside id { code, altDown, controlDown, metaDown, shiftDown } =
-    let
-        noModifierDown =
-            not (altDown || controlDown || metaDown || shiftDown)
-
-        onlyShiftDown =
-            not altDown && not controlDown && not metaDown && shiftDown
-
-        onlyControlDown =
-            not altDown && controlDown && not metaDown && not shiftDown
-
-        notHandlingThatKey =
-            Decode.fail "not handling that key combination"
-    in
-    case code of
-        "ArrowUp" ->
-            if noModifierDown then
-                Decode.succeed (ListArrowUpDown id)
-
-            else if onlyShiftDown then
-                Decode.succeed (ListShiftArrowUpDown id)
-
-            else
-                notHandlingThatKey
-
-        "ArrowDown" ->
-            if noModifierDown then
-                Decode.succeed (ListArrowDownDown id)
-
-            else if onlyShiftDown then
-                Decode.succeed (ListShiftArrowDownDown id)
-
-            else
-                notHandlingThatKey
-
-        "Enter" ->
-            if noModifierDown then
-                Decode.succeed (ListEnterDown id)
-
-            else
-                notHandlingThatKey
-
-        " " ->
-            if not fromOutside then
-                if onlyShiftDown then
-                    Decode.succeed (ListShiftSpaceDown id)
-
-                else if noModifierDown then
-                    Decode.succeed (ListSpaceDown id)
-
-                else
-                    notHandlingThatKey
-
-            else
-                notHandlingThatKey
-
-        "Home" ->
-            if not altDown && controlDown && not metaDown && shiftDown then
-                Decode.succeed (ListControlShiftHomeDown id)
-
-            else if noModifierDown then
-                Decode.succeed (ListHomeDown id)
-
-            else
-                notHandlingThatKey
-
-        "End" ->
-            if not altDown && controlDown && not metaDown && shiftDown then
-                Decode.succeed (ListControlShiftEndDown id)
-
-            else if noModifierDown then
-                Decode.succeed (ListEndDown id)
-
-            else
-                notHandlingThatKey
-
-        "a" ->
-            if not fromOutside then
-                if onlyControlDown then
-                    Decode.succeed ListControlADown
-
-                else if noModifierDown && (String.length code == 1) then
-                    Decode.succeed (ListKeyDown id code)
-
-                else
-                    notHandlingThatKey
-
-            else
-                notHandlingThatKey
-
-        _ ->
-            if not fromOutside then
-                if noModifierDown && (String.length code == 1) then
-                    Decode.succeed (ListKeyDown id code)
-
-                else
-                    notHandlingThatKey
-
-            else
-                notHandlingThatKey
-
-
-{-| Opaque type for providing view customization of the listbox widget.
--}
-type Views a node msg
-    = Views
-        { listbox : ListboxAttrs msg -> { options : List node } -> node
-        , option :
-            OptionAttrs msg
-            ->
-                { selected : Bool
-                , focused : Bool
-                , hovered : Bool
-                , maybeQuery : Maybe String
-                }
-            -> a
-            -> node
-        }
-
-
-{-| TODO
--}
-type alias ListboxAttrs msg =
-    { id : String
-    , role : String
-    , ariaMultiselectable : String
-    , ariaLabelledby : Maybe String
-    , ariaLabel : Maybe String
-    , ariaActivedescendant : Maybe String
-    , tabindex : Maybe Int
-    , preventDefaultOnKeydown : Decoder ( msg, Bool )
-    , onMousedown : msg
-    , onMouseup : msg
-    , onFocus : msg
-    , onBlur : msg
-    }
-
-
-{-| TODO
--}
-type alias OptionAttrs msg =
-    { id : String
-    , role : String
-    , ariaSelected : Maybe String
-    , onMouseenter : msg
-    , onMouseleave : msg
-    , onClick : msg
-    }
-
-
-{-| If you want to use other UI libraries like `rtfeldman/elm-css` or
-`mdgriffith/elm-ui` you have to generate Views using this function. Take a look
-at the implementation of `html` for a starting point. The `examples/` folder of
-the package repository contains an implementation for `mdgriffith/elm-ui`.
--}
-custom :
-    { listbox :
-        ListboxAttrs msg
-        ->
-            { options : List node
-            }
-        -> node
-    , option :
-        OptionAttrs msg
-        ->
-            { selected : Bool
-            , focused : Bool
-            , hovered : Bool
-            , maybeQuery : Maybe String
-            }
-        -> a
-        -> node
-    }
-    -> Views a node msg
-custom =
-    Views
-
-
-{-| Generate view customizations for the standard `elm/html` package. You can
-customize the styling with the following fields:
-
-  - **ul**: A list of html attributes applied to the outer listbox.
-
-  - **li**: A function returning `HtmlDetails` for each option in your
-    entries list. It gets the actual option value `a` and flags telling you if
-    this option is currently `selected`, `focused` or `hovered`. If the user
-    typed in a query, you get this via the `maybeQuery` field.
-
-The DOM structure of a listbox will be something like this:
-
-    listbox =
-        Html.ul
-            [ ... ] -- ul attributes
-            [ Html.li
-                [ ... ] -- liDivider attributes
-                [ ... ] -- liDivider children
-            , Html.li
-                [ ... ] -- liOption attributes
-                [ ... ] -- liOption children
-            , ...
-            , Html.li
-                [ ... ] -- liOption attributes
-                [ ... ] -- liOption children
-            ]
-
--}
-html :
-    { ul : List (Attribute msg)
-    , li :
-        { selected : Bool
-        , focused : Bool
-        , hovered : Bool
-        , maybeQuery : Maybe String
-        }
-        -> a
-        ->
-            { attributes : List (Attribute msg)
-            , children : List (Html msg)
-            }
-    }
-    -> Views a (Html msg) msg
-html config =
-    Views
-        { listbox =
-            \attrs { options } ->
-                let
-                    addAriaLabelledBy htmlAttrs =
-                        case attrs.ariaLabelledby of
-                            Nothing ->
-                                htmlAttrs
-
-                            Just ariaLabelledby ->
-                                Attributes.attribute "aria-labelledby" ariaLabelledby :: htmlAttrs
-
-                    addAriaLabel htmlAttrs =
-                        case attrs.ariaLabel of
-                            Nothing ->
-                                htmlAttrs
-
-                            Just ariaLabel ->
-                                Attributes.attribute "aria-label" ariaLabel :: htmlAttrs
-
-                    addAriaActivedescendant htmlAttrs =
-                        case attrs.ariaActivedescendant of
-                            Nothing ->
-                                htmlAttrs
-
-                            Just ariaActivedescendant ->
-                                Attributes.attribute "aria-activedescendant" ariaActivedescendant
-                                    :: htmlAttrs
-
-                    addTabindex htmlAttrs =
-                        case attrs.tabindex of
-                            Nothing ->
-                                htmlAttrs
-
-                            Just tabindex ->
-                                Attributes.tabindex tabindex :: htmlAttrs
-                in
-                Html.ul
-                    (([ Attributes.id attrs.id
-                      , Attributes.attribute "role" attrs.role
-                      , Attributes.attribute "aria-multiselectable" attrs.ariaMultiselectable
-                      , Events.preventDefaultOn "keydown" attrs.preventDefaultOnKeydown
-                      , Events.onMouseDown attrs.onMousedown
-                      , Events.onMouseUp attrs.onMouseup
-                      , Events.onFocus attrs.onFocus
-                      , Events.onBlur attrs.onFocus
-                      ]
-                        |> addAriaLabelledBy
-                        |> addAriaLabel
-                        |> addAriaActivedescendant
-                        |> addTabindex
-                     )
-                        ++ config.ul
-                    )
-                    options
-        , option =
-            \attrs state a ->
-                let
-                    htmlDetails =
-                        config.li state a
-
-                    addAriaSelected htmlAttrs =
-                        case attrs.ariaSelected of
-                            Nothing ->
-                                htmlAttrs
-
-                            Just ariaSelected ->
-                                Attributes.attribute "aria-selected" ariaSelected :: htmlAttrs
-                in
-                Html.li
-                    (([ Attributes.id attrs.id
-                      , Attributes.attribute "role" attrs.role
-                      , Events.onMouseEnter attrs.onMouseenter
-                      , Events.onMouseLeave attrs.onMouseleave
-                      , Events.onClick attrs.onClick
-                      ]
-                        |> addAriaSelected
-                     )
-                        ++ htmlDetails.attributes
-                    )
-                    htmlDetails.children
-        }
-
-
-{-| This adds all the keydown event listener needed for the listbox on any DOM
-node. For example, this could be an input field which keeps focused while the
-listbox is displayed in a dropdown. You usually want to set `focusable = False`
-inside the `ViewConfig` when using this event listener.
-
-You must provide your own event decoder, which is tried **before** the
-listbox's event decoder. This lets you prevent the listbox reacting on key
-combinations. If you do not need to handle keydown events, just insert a failing decoder:
-
-    view =
-        Html.input
-            [ Html.Events.preventDefaultOn "keydown"
-                (preventDefaultOnKeyDown
-                    { id = "fruits-listbox"
-                    , labelledBy = "fruits"
-                    , lift = ListboxMsg
-                    }
-                    (Decode.fail "not handling this event here")
-                )
-            ]
-            []
-
-In this example, pressing keys like `ArrowUp` and `ArrowDown` will adjust the
-listbox's focus although the listbox itself is not focused.
-
--}
-preventDefaultOnKeyDown : Instance a msg -> Decoder ( msg, Bool ) -> Decoder ( msg, Bool )
-preventDefaultOnKeyDown instance decoder =
-    Decode.oneOf
-        [ decoder
-        , Decode.andThen
-            (listKeyPress True instance.id
-                >> Decode.map (\msg -> ( instance.lift msg, True ))
-            )
-            KeyInfo.decoder
-        ]
-
-
-{-| Returns the HTML id of the currently focused entry.
--}
-focusedEntryId :
-    { uniqueId : a -> String
-    , focusable : Bool
-    , markActiveDescendant : Bool
-    }
-    -> Instance a msg
-    -> List a
-    -> Listbox
-    -> Maybe String
-focusedEntryId config instance entries (Listbox listbox) =
-    case listbox.focus of
-        NoFocus ->
-            Nothing
-
-        Focus current ->
-            find config.uniqueId entries current
-                |> Maybe.map (printEntryId instance.id << config.uniqueId)
-
-        Pending { current } ->
-            find config.uniqueId entries current
-                |> Maybe.map (printEntryId instance.id << config.uniqueId)
-
-
-
----- UNIQUE SELECTION
-
-
-{-| Use this instead of `view` if the user can only select **at
-most one** entry in the listbox. The only difference between the type signature
-of this function and the one of `view` is that the last argument is a `Maybe a`
-instead of a `List a`.
--}
-viewUnique :
-    Views a node msg
-    ->
-        { uniqueId : a -> String
-        , focusable : Bool
-        , markActiveDescendant : Bool
-        }
-    -> Instance a msg
-    -> List a
-    -> Listbox
-    -> Maybe a
-    -> node
-viewUnique views config instance entries listbox selection =
-    viewHelp False views config instance entries listbox (maybeToList selection)
-
-
-{-| Use this function instead of `update` if the user can only
-select **at most one** entry in the listbox. The only difference between the
-type signature of this function and the one of `update` is that the last
-argument is a `Maybe a` instead of a `List a`.
--}
-updateUnique :
-    { uniqueId : a -> String
-    , behaviour : Behaviour a
-    }
-    -> List a
-    -> Msg a
-    -> Listbox
-    -> Maybe a
-    -> ( Listbox, Cmd (Msg a), Maybe a )
-updateUnique config allEntries msg listbox selection =
-    let
-        ( newListbox, cmd, newSelection ) =
-            update config allEntries msg listbox <|
-                maybeToList selection
-    in
-    ( newListbox, cmd, listToMaybe newSelection )
-
-
-{-| Sets the keyboard focus to the provided options.
-
-**Note**: This will not adjust the scroll position of the listbox, so you might
-want to apply `scrollToFocus` afterwards.
-
--}
-focusEntryUnique :
-    { uniqueId : a -> String
-    , behaviour : Behaviour a
-    }
-    -> a
-    -> Listbox
-    -> Maybe a
-    -> ( Listbox, Maybe a )
-focusEntryUnique config newEntry listbox selection =
-    withUnique selection (focusEntry config newEntry listbox)
-
-
-{-| Sets the keyboard focus to the next option. If `jumpAtEnds` is true and the
-focus is already on the last option, the first option is selected.
-
-**Note**: This will not adjust the scroll position of the listbox, so you might
-want to apply `scrollToFocus` afterwards.
-
--}
-focusNextOrFirstEntryUnique :
-    { uniqueId : a -> String
-    , behaviour : Behaviour a
-    }
-    -> List a
-    -> Listbox
-    -> Maybe a
-    -> ( Listbox, Maybe a )
-focusNextOrFirstEntryUnique config allEntries listbox selection =
-    withUnique selection (focusNextOrFirstEntry config allEntries listbox)
-
-
-{-| Sets the keyboard focus to the previous option. If `jumpAtEnds` is true and the
-focus is already on the first option, the first option is selected.
-
-**Note**: This will not adjust the scroll position of the listbox, so you might
-want to apply `scrollToFocus` afterwards.
-
--}
-focusPreviousOrFirstEntryUnique :
-    { uniqueId : a -> String
-    , behaviour : Behaviour a
-    }
-    -> List a
-    -> Listbox
-    -> Maybe a
-    -> ( Listbox, Maybe a )
-focusPreviousOrFirstEntryUnique config allEntries listbox selection =
-    withUnique selection (focusPreviousOrFirstEntry config allEntries listbox)
-
-
-withUnique : Maybe a -> (List a -> ( Listbox, List a )) -> ( Listbox, Maybe a )
-withUnique selection func =
-    let
-        ( listbox, list ) =
-            func (maybeToList selection)
-    in
-    ( listbox, listToMaybe list )
-
-
-maybeToList : Maybe a -> List a
-maybeToList maybeA =
-    case maybeA of
-        Nothing ->
-            []
-
-        Just a ->
-            [ a ]
-
-
-listToMaybe : List a -> Maybe a
-listToMaybe listA =
-    case listA of
-        [] ->
-            Nothing
-
-        a :: _ ->
-            Just a
-
-
-
--- UPDATE
+---- UPDATE
 
 
 {-| -}
@@ -1919,93 +1025,235 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
                     |> toggle a
 
 
-focusPendingKeyboardFocus : Listbox -> Listbox
-focusPendingKeyboardFocus (Listbox listbox) =
-    case listbox.focus of
-        NoFocus ->
-            Listbox listbox
-
-        Focus _ ->
-            Listbox listbox
-
-        Pending { pending } ->
-            Listbox { listbox | focus = Focus pending }
-
-
-newPosition : Behaviour a -> DomInfoOption -> ( Float, Float )
-newPosition behaviour entryDomData =
+{-| Use this function instead of `update` if the user can only
+select **at most one** entry in the listbox. The only difference between the
+type signature of this function and the one of `update` is that the last
+argument is a `Maybe a` instead of a `List a`.
+-}
+updateUnique :
+    { uniqueId : a -> String
+    , behaviour : Behaviour a
+    }
+    -> List a
+    -> Msg a
+    -> Listbox
+    -> Maybe a
+    -> ( Listbox, Cmd (Msg a), Maybe a )
+updateUnique config allEntries msg listbox selection =
     let
-        ---- SCROLLING
-        viewport =
-            entryDomData.viewportList.viewport
-
-        list =
-            entryDomData.elementList
-
-        li =
-            entryDomData.elementLi
-
-        previousLi =
-            entryDomData.elementPreviousLi
-
-        -- MEASUREMENTS
-        liY =
-            li.element.y - list.element.y + viewport.y
-
-        liHeight =
-            li.element.height
-
-        previousLiY =
-            previousLi.element.y - list.element.y + viewport.y
-
-        previousLiHeight =
-            previousLi.element.height
-
-        -- CONDITIONS
-        previousEntryHidden =
-            (previousLiY + previousLiHeight < viewport.y)
-                || (previousLiY > viewport.y + viewport.height)
-
-        newEntryTooLow =
-            liY + liHeight + behaviour.minimalGap > viewport.y + viewport.height
-
-        newEntryTooHigh =
-            liY - behaviour.minimalGap < viewport.y
+        ( newListbox, cmd, newSelection ) =
+            update config allEntries msg listbox <|
+                maybeToList selection
     in
-    if previousEntryHidden then
-        ( viewport.x
-        , liY + liHeight / 2 - viewport.height / 2
-        )
-
-    else if newEntryTooLow then
-        ( viewport.x
-        , liY + liHeight - viewport.height + behaviour.initialGap
-        )
-
-    else if newEntryTooHigh then
-        ( viewport.x
-        , liY - behaviour.initialGap
-        )
-
-    else
-        ( viewport.x
-        , viewport.y
-        )
+    ( newListbox, cmd, listToMaybe newSelection )
 
 
-andDo : effect -> ( a, b ) -> ( a, effect, b )
-andDo effect ( a, b ) =
-    ( a, effect, b )
+{-| Sets the keyboard focus to the provided options.
+
+**Note**: This will not adjust the scroll position of the listbox, so you might
+want to apply `scrollToFocus` afterwards.
+
+-}
+focusEntry :
+    { uniqueId : a -> String
+    , behaviour : Behaviour a
+    }
+    -> a
+    -> Listbox
+    -> List a
+    -> ( Listbox, List a )
+focusEntry config newEntry (Listbox listbox) selection =
+    ( Listbox
+        { listbox
+            | query = NoQuery
+            , focus = Focus (config.uniqueId newEntry)
+        }
+    , if config.behaviour.selectionFollowsFocus then
+        [ newEntry ]
+
+      else
+        selection
+    )
 
 
-or : Maybe a -> Maybe a -> Maybe a
-or fallback default =
-    case default of
+{-| Sets the keyboard focus to the provided options.
+
+**Note**: This will not adjust the scroll position of the listbox, so you might
+want to apply `scrollToFocus` afterwards.
+
+-}
+focusEntryUnique :
+    { uniqueId : a -> String
+    , behaviour : Behaviour a
+    }
+    -> a
+    -> Listbox
+    -> Maybe a
+    -> ( Listbox, Maybe a )
+focusEntryUnique config newEntry listbox selection =
+    withUnique selection (focusEntry config newEntry listbox)
+
+
+{-| Sets the keyboard focus to the next option. If `jumpAtEnds` is true and the
+focus is already on the last option, the first option is selected.
+
+**Note**: This will not adjust the scroll position of the listbox, so you might
+want to apply `scrollToFocus` afterwards.
+
+-}
+focusNextOrFirstEntry :
+    { uniqueId : a -> String
+    , behaviour : Behaviour a
+    }
+    -> List a
+    -> Listbox
+    -> List a
+    -> ( Listbox, List a )
+focusNextOrFirstEntry config allEntries (Listbox listbox) selection =
+    let
+        { uniqueId, behaviour } =
+            config
+
+        maybeA =
+            case currentFocus listbox.focus of
+                Nothing ->
+                    List.head allEntries
+
+                Just hash ->
+                    case findNext uniqueId allEntries hash of
+                        Just (First a) ->
+                            if behaviour.jumpAtEnds then
+                                Just a
+
+                            else
+                                Nothing
+
+                        Just (Next a) ->
+                            Just a
+
+                        Nothing ->
+                            Nothing
+    in
+    case maybeA of
         Nothing ->
-            fallback
+            ( Listbox listbox, selection )
 
-        Just _ ->
-            default
+        Just a ->
+            let
+                newListbox =
+                    Listbox { listbox | focus = Focus (uniqueId a) }
+            in
+            if behaviour.selectionFollowsFocus then
+                ( newListbox
+                , [ a ]
+                )
+
+            else
+                ( newListbox
+                , selection
+                )
+
+
+{-| Sets the keyboard focus to the next option. If `jumpAtEnds` is true and the
+focus is already on the last option, the first option is selected.
+
+**Note**: This will not adjust the scroll position of the listbox, so you might
+want to apply `scrollToFocus` afterwards.
+
+-}
+focusNextOrFirstEntryUnique :
+    { uniqueId : a -> String
+    , behaviour : Behaviour a
+    }
+    -> List a
+    -> Listbox
+    -> Maybe a
+    -> ( Listbox, Maybe a )
+focusNextOrFirstEntryUnique config allEntries listbox selection =
+    withUnique selection (focusNextOrFirstEntry config allEntries listbox)
+
+
+{-| Sets the keyboard focus to the previous option. If `jumpAtEnds` is true and the
+focus is already on the first option, the first option is selected.
+
+**Note**: This will not adjust the scroll position of the listbox, so you might
+want to apply `scrollToFocus` afterwards.
+
+-}
+focusPreviousOrFirstEntry :
+    { uniqueId : a -> String
+    , behaviour : Behaviour a
+    }
+    -> List a
+    -> Listbox
+    -> List a
+    -> ( Listbox, List a )
+focusPreviousOrFirstEntry config allEntries (Listbox listbox) selection =
+    let
+        { uniqueId, behaviour } =
+            config
+
+        maybeA =
+            case currentFocus listbox.focus of
+                Nothing ->
+                    List.head allEntries
+
+                Just hash ->
+                    case findPrevious uniqueId allEntries hash of
+                        Just (Last a) ->
+                            if behaviour.jumpAtEnds then
+                                Just a
+
+                            else
+                                Nothing
+
+                        Just (Previous a) ->
+                            Just a
+
+                        Nothing ->
+                            Nothing
+    in
+    case maybeA of
+        Nothing ->
+            ( Listbox listbox, selection )
+
+        Just a ->
+            let
+                newListbox =
+                    Listbox { listbox | focus = Focus (uniqueId a) }
+            in
+            if behaviour.selectionFollowsFocus then
+                ( newListbox
+                , [ a ]
+                )
+
+            else
+                ( newListbox
+                , selection
+                )
+
+
+{-| Sets the keyboard focus to the previous option. If `jumpAtEnds` is true and the
+focus is already on the first option, the first option is selected.
+
+**Note**: This will not adjust the scroll position of the listbox, so you might
+want to apply `scrollToFocus` afterwards.
+
+-}
+focusPreviousOrFirstEntryUnique :
+    { uniqueId : a -> String
+    , behaviour : Behaviour a
+    }
+    -> List a
+    -> Listbox
+    -> Maybe a
+    -> ( Listbox, Maybe a )
+focusPreviousOrFirstEntryUnique config allEntries listbox selection =
+    withUnique selection (focusPreviousOrFirstEntry config allEntries listbox)
+
+
+
+-- CMDS
 
 
 getViewportOfList : String -> Direction -> a -> Cmd (Msg a)
@@ -2014,15 +1262,16 @@ getViewportOfList id direction option =
         |> Task.attempt (ViewportOfListReceived direction option)
 
 
+attemptToGetDomInfoOption : String -> String -> String -> a -> Cmd (Msg a)
+attemptToGetDomInfoOption id hash previousHash option =
+    getDomInfoOption id hash previousHash
+        |> Task.attempt (BrowserReturnedDomInfoOption option)
+
+
 scrollListToTop : String -> Cmd (Msg a)
 scrollListToTop id =
     Dom.getViewportOf (printListId id)
-        |> Task.andThen
-            (\list ->
-                Dom.setViewportOf (printListId id)
-                    list.viewport.x
-                    0
-            )
+        |> Task.andThen (\list -> Dom.setViewportOf (printListId id) list.viewport.x 0)
         |> Task.attempt (\_ -> NoOp)
 
 
@@ -2038,18 +1287,6 @@ scrollListToBottom id =
         |> Task.attempt (\_ -> NoOp)
 
 
-attemptToGetDomInfoOption : String -> String -> String -> a -> Cmd (Msg a)
-attemptToGetDomInfoOption id hash previousHash option =
-    getDomInfoOption id hash previousHash
-        |> Task.attempt (BrowserReturnedDomInfoOption option)
-
-
-setViewportOf : String -> Float -> Float -> Cmd (Msg a)
-setViewportOf id x y =
-    Dom.setViewportOf (printListId id) x y
-        |> Task.attempt (\_ -> NoOp)
-
-
 attemptToScrollToOption : Behaviour msg -> String -> String -> Maybe String -> Cmd (Msg a)
 attemptToScrollToOption behaviour id hash maybePreviousHash =
     case maybePreviousHash of
@@ -2062,6 +1299,30 @@ attemptToScrollToOption behaviour id hash maybePreviousHash =
             getDomInfoOption id hash previousHash
                 |> Task.andThen (scrollToOption behaviour id)
                 |> Task.attempt (\_ -> NoOp)
+
+
+setViewportOf : String -> Float -> Float -> Cmd (Msg a)
+setViewportOf id x y =
+    Dom.setViewportOf (printListId id) x y
+        |> Task.attempt (\_ -> NoOp)
+
+
+{-| A command adjusting the scroll position of the listbox such that the
+current keyboard focus is visible.
+-}
+scrollToFocus : Behaviour a -> Instance a msg -> Listbox -> Cmd msg
+scrollToFocus behaviour { id, lift } (Listbox listbox) =
+    Cmd.map lift
+        (case listbox.focus of
+            NoFocus ->
+                Cmd.none
+
+            Focus current ->
+                attemptToScrollToOption behaviour id current Nothing
+
+            Pending { current } ->
+                attemptToScrollToOption behaviour id current Nothing
+        )
 
 
 
@@ -2098,29 +1359,6 @@ getDomInfoOption id hash previousHash =
         (Dom.getElement (printListId id))
         (Dom.getElement (printEntryId id hash))
         (Dom.getElement (printEntryId id previousHash))
-
-
-scrollToOptionInitial : Behaviour msg -> String -> DomInfoOptionInitial -> Task Dom.Error ()
-scrollToOptionInitial behaviour id { viewportList, elementList, elementLi } =
-    let
-        { viewport } =
-            viewportList
-
-        liY =
-            elementLi.element.y - elementList.element.y + viewport.y
-
-        liHeight =
-            elementLi.element.height
-
-        entryHidden =
-            (liY + liHeight - behaviour.minimalGap < viewport.y)
-                || (liY + behaviour.minimalGap > viewport.y + viewport.height)
-    in
-    if entryHidden then
-        Dom.setViewportOf (printListId id) viewport.x (liY + liHeight / 2 - viewport.height / 2)
-
-    else
-        Task.succeed ()
 
 
 scrollToOption : Behaviour msg -> String -> DomInfoOption -> Task Dom.Error ()
@@ -2191,8 +1429,39 @@ scrollToOption behaviour id entryDomData =
         Task.succeed ()
 
 
+scrollToOptionInitial : Behaviour msg -> String -> DomInfoOptionInitial -> Task Dom.Error ()
+scrollToOptionInitial behaviour id { viewportList, elementList, elementLi } =
+    let
+        { viewport } =
+            viewportList
 
--- SUBSCRIPTIONS
+        liY =
+            elementLi.element.y - elementList.element.y + viewport.y
+
+        liHeight =
+            elementLi.element.height
+
+        entryHidden =
+            (liY + liHeight - behaviour.minimalGap < viewport.y)
+                || (liY + behaviour.minimalGap > viewport.y + viewport.height)
+    in
+    if entryHidden then
+        Dom.setViewportOf (printListId id) viewport.x (liY + liHeight / 2 - viewport.height / 2)
+
+    else
+        Task.succeed ()
+
+
+{-| A task to give the listbox focus. The first argument must match the
+`Instance` used in the `view` function!
+-}
+focus : Instance a msg -> Task Dom.Error ()
+focus { id } =
+    Dom.focus (printListId id)
+
+
+
+---- SUBSCRIPTIONS
 
 
 {-| Do not forget to add this to your subscriptions:
@@ -2213,7 +1482,619 @@ subscriptions (Listbox listbox) =
 
 
 
--- IDS
+---- VIEW CONFIG
+
+
+{-| To make a listbox unique in your application you have to provide this
+information to the `view` function:
+
+  - **id**: The unique id of the listbox.
+
+  - **label**: Specify how the listbox is labelled. See `Label` for
+    possible options.
+
+  - **lift**: Your message type constructor wrapping the listbox `Msg`'s.
+
+-}
+type alias Instance a msg =
+    { id : String
+    , label : Label
+    , lift : Msg a -> msg
+    }
+
+
+{-| There are three possibilities to label a listbox: it can be
+`labelledBy` by another DOM element with the given id, it can provide its own
+`label`, or it can have `noLabel` at all.
+
+The last case is only allowed when the listbox is part of another widget which
+itself is labelled.
+
+-}
+type alias Label =
+    Internal.Label
+
+
+{-| -}
+labelledBy : String -> Label
+labelledBy =
+    Internal.LabelledBy
+
+
+{-| -}
+label : String -> Label
+label =
+    Internal.Label
+
+
+{-| -}
+noLabel : Label
+noLabel =
+    Internal.NoLabel
+
+
+{-| Opaque type for providing view customization of the listbox widget.
+-}
+type Views a node msg
+    = Views
+        { listbox : ListboxAttrs msg -> { options : List node } -> node
+        , option :
+            OptionAttrs msg
+            ->
+                { selected : Bool
+                , focused : Bool
+                , hovered : Bool
+                , maybeQuery : Maybe String
+                }
+            -> a
+            -> node
+        }
+
+
+{-| TODO
+-}
+type alias ListboxAttrs msg =
+    { id : String
+    , role : String
+    , ariaMultiselectable : String
+    , ariaLabelledby : Maybe String
+    , ariaLabel : Maybe String
+    , ariaActivedescendant : Maybe String
+    , tabindex : Maybe Int
+    , preventDefaultOnKeydown : Decoder ( msg, Bool )
+    , onMousedown : msg
+    , onMouseup : msg
+    , onFocus : msg
+    , onBlur : msg
+    }
+
+
+{-| TODO
+-}
+type alias OptionAttrs msg =
+    { id : String
+    , role : String
+    , ariaSelected : Maybe String
+    , onMouseenter : msg
+    , onMouseleave : msg
+    , onClick : msg
+    }
+
+
+{-| If you want to use other UI libraries like `rtfeldman/elm-css` or
+`mdgriffith/elm-ui` you have to generate Views using this function. Take a look
+at the implementation of `html` for a starting point. The `examples/` folder of
+the package repository contains an implementation for `mdgriffith/elm-ui`.
+-}
+custom :
+    { listbox :
+        ListboxAttrs msg
+        ->
+            { options : List node
+            }
+        -> node
+    , option :
+        OptionAttrs msg
+        ->
+            { selected : Bool
+            , focused : Bool
+            , hovered : Bool
+            , maybeQuery : Maybe String
+            }
+        -> a
+        -> node
+    }
+    -> Views a node msg
+custom =
+    Views
+
+
+{-| Generate view customizations for the standard `elm/html` package. You can
+customize the styling with the following fields:
+
+  - **ul**: A list of html attributes applied to the outer listbox.
+
+  - **li**: A function returning `HtmlDetails` for each option in your
+    entries list. It gets the actual option value `a` and flags telling you if
+    this option is currently `selected`, `focused` or `hovered`. If the user
+    typed in a query, you get this via the `maybeQuery` field.
+
+The DOM structure of a listbox will be something like this:
+
+    listbox =
+        Html.ul
+            [ ... ] -- ul attributes
+            [ Html.li
+                [ ... ] -- liDivider attributes
+                [ ... ] -- liDivider children
+            , Html.li
+                [ ... ] -- liOption attributes
+                [ ... ] -- liOption children
+            , ...
+            , Html.li
+                [ ... ] -- liOption attributes
+                [ ... ] -- liOption children
+            ]
+
+-}
+html :
+    { ul : List (Attribute msg)
+    , li :
+        { selected : Bool
+        , focused : Bool
+        , hovered : Bool
+        , maybeQuery : Maybe String
+        }
+        -> a
+        ->
+            { attributes : List (Attribute msg)
+            , children : List (Html msg)
+            }
+    }
+    -> Views a (Html msg) msg
+html config =
+    Views
+        { listbox =
+            \attrs { options } ->
+                let
+                    addAriaLabelledBy htmlAttrs =
+                        case attrs.ariaLabelledby of
+                            Nothing ->
+                                htmlAttrs
+
+                            Just ariaLabelledby ->
+                                Attributes.attribute "aria-labelledby" ariaLabelledby :: htmlAttrs
+
+                    addAriaLabel htmlAttrs =
+                        case attrs.ariaLabel of
+                            Nothing ->
+                                htmlAttrs
+
+                            Just ariaLabel ->
+                                Attributes.attribute "aria-label" ariaLabel :: htmlAttrs
+
+                    addAriaActivedescendant htmlAttrs =
+                        case attrs.ariaActivedescendant of
+                            Nothing ->
+                                htmlAttrs
+
+                            Just ariaActivedescendant ->
+                                Attributes.attribute "aria-activedescendant" ariaActivedescendant
+                                    :: htmlAttrs
+
+                    addTabindex htmlAttrs =
+                        case attrs.tabindex of
+                            Nothing ->
+                                htmlAttrs
+
+                            Just tabindex ->
+                                Attributes.tabindex tabindex :: htmlAttrs
+                in
+                Html.ul
+                    (([ Attributes.id attrs.id
+                      , Attributes.attribute "role" attrs.role
+                      , Attributes.attribute "aria-multiselectable" attrs.ariaMultiselectable
+                      , Events.preventDefaultOn "keydown" attrs.preventDefaultOnKeydown
+                      , Events.onMouseDown attrs.onMousedown
+                      , Events.onMouseUp attrs.onMouseup
+                      , Events.onFocus attrs.onFocus
+                      , Events.onBlur attrs.onFocus
+                      ]
+                        |> addAriaLabelledBy
+                        |> addAriaLabel
+                        |> addAriaActivedescendant
+                        |> addTabindex
+                     )
+                        ++ config.ul
+                    )
+                    options
+        , option =
+            \attrs state a ->
+                let
+                    htmlDetails =
+                        config.li state a
+
+                    addAriaSelected htmlAttrs =
+                        case attrs.ariaSelected of
+                            Nothing ->
+                                htmlAttrs
+
+                            Just ariaSelected ->
+                                Attributes.attribute "aria-selected" ariaSelected :: htmlAttrs
+                in
+                Html.li
+                    (([ Attributes.id attrs.id
+                      , Attributes.attribute "role" attrs.role
+                      , Events.onMouseEnter attrs.onMouseenter
+                      , Events.onMouseLeave attrs.onMouseleave
+                      , Events.onClick attrs.onClick
+                      ]
+                        |> addAriaSelected
+                     )
+                        ++ htmlDetails.attributes
+                    )
+                    htmlDetails.children
+        }
+
+
+
+---- VIEW
+
+
+{-| Take a list of all entries and a list of selected options and display it as
+a listbox. You have to provide a `ViewConfig` for the styling and an `Instance`
+to uniquely identify this listbox. For example:
+
+    view : Listbox -> List String -> Html Msg
+    view listbox selection =
+        Html.div []
+            [ Listbox.view viewConfig
+                { id = "fruits-listbox"
+                , label = label "fruits"
+                , lift = ListboxMsg
+                }
+                fruits
+                listbox
+                selection
+            ]
+
+    fruits : List (Entry String divider)
+    fruits =
+        List.map Listbox.option
+            [ "Apple", "Banana", "Cherry" ]
+
+    type Msg
+        = ListboxMsg Listbox.Msg
+
+You can provide the following options:
+
+  - **uniqueId**: A hash function for the entries.
+
+  - **focusable**: Should the listbox be focusable?
+
+-}
+view :
+    Views a node msg
+    ->
+        { uniqueId : a -> String
+        , focusable : Bool
+        , markActiveDescendant : Bool
+        }
+    -> Instance a msg
+    -> List a
+    -> Listbox
+    -> List a
+    -> node
+view =
+    viewHelp True
+
+
+{-| Use this instead of `view` if the user can only select **at
+most one** entry in the listbox. The only difference between the type signature
+of this function and the one of `view` is that the last argument is a `Maybe a`
+instead of a `List a`.
+-}
+viewUnique :
+    Views a node msg
+    ->
+        { uniqueId : a -> String
+        , focusable : Bool
+        , markActiveDescendant : Bool
+        }
+    -> Instance a msg
+    -> List a
+    -> Listbox
+    -> Maybe a
+    -> node
+viewUnique views config instance entries listbox selection =
+    viewHelp False views config instance entries listbox (maybeToList selection)
+
+
+viewHelp :
+    Bool
+    -> Views a node msg
+    ->
+        { uniqueId : a -> String
+        , focusable : Bool
+        , markActiveDescendant : Bool
+        }
+    -> Instance a msg
+    -> List a
+    -> Listbox
+    -> List a
+    -> node
+viewHelp multiSelectable (Views views) config instance allEntries (Listbox data) selection =
+    views.listbox
+        { id = printListId instance.id
+        , role = "listbox"
+        , ariaMultiselectable = stringFromBool multiSelectable
+        , ariaLabelledby =
+            case instance.label of
+                LabelledBy id ->
+                    Just id
+
+                Label _ ->
+                    Nothing
+
+                NoLabel ->
+                    Nothing
+        , ariaLabel =
+            case instance.label of
+                LabelledBy _ ->
+                    Nothing
+
+                Label theLabel ->
+                    Just theLabel
+
+                NoLabel ->
+                    Nothing
+        , ariaActivedescendant =
+            if config.markActiveDescendant then
+                currentFocus data.focus
+                    |> Maybe.andThen (find config.uniqueId allEntries)
+                    |> Maybe.map (config.uniqueId >> printEntryId instance.id)
+
+            else
+                Nothing
+        , tabindex =
+            if config.focusable then
+                Just 0
+
+            else
+                Nothing
+        , preventDefaultOnKeydown =
+            Decode.andThen
+                (listKeyPress False instance.id
+                    >> Decode.map (\msg -> ( instance.lift msg, True ))
+                )
+                KeyInfo.decoder
+        , onMousedown = instance.lift ListMouseDown
+        , onMouseup = instance.lift ListMouseUp
+        , onFocus = instance.lift (ListFocused instance.id)
+        , onBlur = instance.lift ListBlured
+        }
+        { options =
+            List.map (viewOption multiSelectable views.option config instance selection data)
+                allEntries
+        }
+
+
+viewOption :
+    Bool
+    ->
+        (OptionAttrs msg
+         ->
+            { selected : Bool
+            , focused : Bool
+            , hovered : Bool
+            , maybeQuery : Maybe String
+            }
+         -> a
+         -> node
+        )
+    ->
+        { uniqueId : a -> String
+        , focusable : Bool
+        , markActiveDescendant : Bool
+        }
+    -> Instance a msg
+    -> List a
+    -> Data
+    -> a
+    -> node
+viewOption multiSelectable toNode config instance selection data option =
+    let
+        maybeHash =
+            Just (config.uniqueId option)
+
+        selected =
+            List.any ((==) option) selection
+
+        hash =
+            config.uniqueId option
+    in
+    toNode
+        { id = printEntryId instance.id hash
+        , role = "option"
+        , ariaSelected =
+            if multiSelectable then
+                Just (stringFromBool selected)
+
+            else if selected then
+                Just "true"
+
+            else
+                Nothing
+        , onMouseenter = instance.lift (EntryMouseEntered hash)
+        , onMouseleave = instance.lift EntryMouseLeft
+        , onClick = instance.lift (EntryClicked option)
+        }
+        { selected = selected
+        , focused = currentFocus data.focus == maybeHash
+        , hovered = data.hover == maybeHash
+        , maybeQuery =
+            case data.query of
+                NoQuery ->
+                    Nothing
+
+                Query _ _ text ->
+                    Just text
+        }
+        option
+
+
+stringFromBool : Bool -> String
+stringFromBool bool =
+    if bool then
+        "true"
+
+    else
+        "false"
+
+
+listKeyPress : Bool -> String -> KeyInfo -> Decoder (Msg a)
+listKeyPress fromOutside id { code, altDown, controlDown, metaDown, shiftDown } =
+    let
+        noModifierDown =
+            not (altDown || controlDown || metaDown || shiftDown)
+
+        onlyShiftDown =
+            not altDown && not controlDown && not metaDown && shiftDown
+
+        onlyControlDown =
+            not altDown && controlDown && not metaDown && not shiftDown
+
+        notHandlingThatKey =
+            Decode.fail "not handling that key combination"
+    in
+    case code of
+        "ArrowUp" ->
+            if noModifierDown then
+                Decode.succeed (ListArrowUpDown id)
+
+            else if onlyShiftDown then
+                Decode.succeed (ListShiftArrowUpDown id)
+
+            else
+                notHandlingThatKey
+
+        "ArrowDown" ->
+            if noModifierDown then
+                Decode.succeed (ListArrowDownDown id)
+
+            else if onlyShiftDown then
+                Decode.succeed (ListShiftArrowDownDown id)
+
+            else
+                notHandlingThatKey
+
+        "Enter" ->
+            if noModifierDown then
+                Decode.succeed (ListEnterDown id)
+
+            else
+                notHandlingThatKey
+
+        " " ->
+            if not fromOutside then
+                if onlyShiftDown then
+                    Decode.succeed (ListShiftSpaceDown id)
+
+                else if noModifierDown then
+                    Decode.succeed (ListSpaceDown id)
+
+                else
+                    notHandlingThatKey
+
+            else
+                notHandlingThatKey
+
+        "Home" ->
+            if not altDown && controlDown && not metaDown && shiftDown then
+                Decode.succeed (ListControlShiftHomeDown id)
+
+            else if noModifierDown then
+                Decode.succeed (ListHomeDown id)
+
+            else
+                notHandlingThatKey
+
+        "End" ->
+            if not altDown && controlDown && not metaDown && shiftDown then
+                Decode.succeed (ListControlShiftEndDown id)
+
+            else if noModifierDown then
+                Decode.succeed (ListEndDown id)
+
+            else
+                notHandlingThatKey
+
+        "a" ->
+            if not fromOutside then
+                if onlyControlDown then
+                    Decode.succeed ListControlADown
+
+                else if noModifierDown && (String.length code == 1) then
+                    Decode.succeed (ListKeyDown id code)
+
+                else
+                    notHandlingThatKey
+
+            else
+                notHandlingThatKey
+
+        _ ->
+            if not fromOutside then
+                if noModifierDown && (String.length code == 1) then
+                    Decode.succeed (ListKeyDown id code)
+
+                else
+                    notHandlingThatKey
+
+            else
+                notHandlingThatKey
+
+
+{-| This adds all the keydown event listener needed for the listbox on any DOM
+node. For example, this could be an input field which keeps focused while the
+listbox is displayed in a dropdown. You usually want to set `focusable = False`
+inside the `ViewConfig` when using this event listener.
+
+You must provide your own event decoder, which is tried **before** the
+listbox's event decoder. This lets you prevent the listbox reacting on key
+combinations. If you do not need to handle keydown events, just insert a failing decoder:
+
+    view =
+        Html.input
+            [ Html.Events.preventDefaultOn "keydown"
+                (preventDefaultOnKeyDown
+                    { id = "fruits-listbox"
+                    , labelledBy = "fruits"
+                    , lift = ListboxMsg
+                    }
+                    (Decode.fail "not handling this event here")
+                )
+            ]
+            []
+
+In this example, pressing keys like `ArrowUp` and `ArrowDown` will adjust the
+listbox's focus although the listbox itself is not focused.
+
+-}
+preventDefaultOnKeyDown : Instance a msg -> Decoder ( msg, Bool ) -> Decoder ( msg, Bool )
+preventDefaultOnKeyDown instance decoder =
+    Decode.oneOf
+        [ decoder
+        , Decode.andThen
+            (listKeyPress True instance.id
+                >> Decode.map (\msg -> ( instance.lift msg, True ))
+            )
+            KeyInfo.decoder
+        ]
+
+
+
+---- IDS
 
 
 printListId : String -> String
@@ -2227,13 +2108,115 @@ printEntryId id entryId =
 
 
 
--- FIND
+---- HELP
 
 
-indexOf : (a -> String) -> List a -> String -> Maybe Int
-indexOf uniqueId entries selectedId =
-    findHelp 0 uniqueId entries selectedId
-        |> Maybe.map Tuple.first
+newPosition : Behaviour a -> DomInfoOption -> ( Float, Float )
+newPosition behaviour entryDomData =
+    let
+        ---- SCROLLING
+        viewport =
+            entryDomData.viewportList.viewport
+
+        list =
+            entryDomData.elementList
+
+        li =
+            entryDomData.elementLi
+
+        previousLi =
+            entryDomData.elementPreviousLi
+
+        -- MEASUREMENTS
+        liY =
+            li.element.y - list.element.y + viewport.y
+
+        liHeight =
+            li.element.height
+
+        previousLiY =
+            previousLi.element.y - list.element.y + viewport.y
+
+        previousLiHeight =
+            previousLi.element.height
+
+        -- CONDITIONS
+        previousEntryHidden =
+            (previousLiY + previousLiHeight < viewport.y)
+                || (previousLiY > viewport.y + viewport.height)
+
+        newEntryTooLow =
+            liY + liHeight + behaviour.minimalGap > viewport.y + viewport.height
+
+        newEntryTooHigh =
+            liY - behaviour.minimalGap < viewport.y
+    in
+    if previousEntryHidden then
+        ( viewport.x
+        , liY + liHeight / 2 - viewport.height / 2
+        )
+
+    else if newEntryTooLow then
+        ( viewport.x
+        , liY + liHeight - viewport.height + behaviour.initialGap
+        )
+
+    else if newEntryTooHigh then
+        ( viewport.x
+        , liY - behaviour.initialGap
+        )
+
+    else
+        ( viewport.x
+        , viewport.y
+        )
+
+
+withUnique : Maybe a -> (List a -> ( Listbox, List a )) -> ( Listbox, Maybe a )
+withUnique selection func =
+    let
+        ( listbox, list ) =
+            func (maybeToList selection)
+    in
+    ( listbox, listToMaybe list )
+
+
+
+---- MISC
+
+
+or : Maybe a -> Maybe a -> Maybe a
+or fallback default =
+    case default of
+        Nothing ->
+            fallback
+
+        Just _ ->
+            default
+
+
+maybeToList : Maybe a -> List a
+maybeToList maybeA =
+    case maybeA of
+        Nothing ->
+            []
+
+        Just a ->
+            [ a ]
+
+
+listToMaybe : List a -> Maybe a
+listToMaybe listA =
+    case listA of
+        [] ->
+            Nothing
+
+        a :: _ ->
+            Just a
+
+
+
+---- FIND
 
 
 find : (a -> String) -> List a -> String -> Maybe a
@@ -2242,12 +2225,7 @@ find uniqueId entries selectedId =
         |> Maybe.map Tuple.second
 
 
-findHelp :
-    Int
-    -> (a -> String)
-    -> List a
-    -> String
-    -> Maybe ( Int, a )
+findHelp : Int -> (a -> String) -> List a -> String -> Maybe ( Int, a )
 findHelp index uniqueId entries selectedId =
     case entries of
         [] ->
@@ -2261,13 +2239,7 @@ findHelp index uniqueId entries selectedId =
                 findHelp (index + 1) uniqueId rest selectedId
 
 
-findWith :
-    (String -> a -> Bool)
-    -> (a -> String)
-    -> String
-    -> List a
-    -> String
-    -> Maybe String
+findWith : (String -> a -> Bool) -> (a -> String) -> String -> List a -> String -> Maybe String
 findWith matchesQuery uniqueId query entries id =
     case entries of
         [] ->
@@ -2285,13 +2257,7 @@ findWith matchesQuery uniqueId query entries id =
                 findWith matchesQuery uniqueId query rest id
 
 
-proceedWith :
-    (String -> a -> Bool)
-    -> (a -> String)
-    -> String
-    -> String
-    -> List a
-    -> Maybe String
+proceedWith : (String -> a -> Bool) -> (a -> String) -> String -> String -> List a -> Maybe String
 proceedWith matchesQuery uniqueId id query entries =
     case entries of
         [] ->
@@ -2311,7 +2277,7 @@ lastEntry entries =
 
 
 
--- PREVIOUS
+---- PREVIOUS
 
 
 type Previous a
@@ -2319,11 +2285,7 @@ type Previous a
     | Last a
 
 
-findPrevious :
-    (a -> String)
-    -> List a
-    -> String
-    -> Maybe (Previous a)
+findPrevious : (a -> String) -> List a -> String -> Maybe (Previous a)
 findPrevious uniqueId entries currentId =
     case entries of
         [] ->
@@ -2339,12 +2301,7 @@ findPrevious uniqueId entries currentId =
                 findPreviousHelp first uniqueId rest currentId
 
 
-findPreviousHelp :
-    a
-    -> (a -> String)
-    -> List a
-    -> String
-    -> Maybe (Previous a)
+findPreviousHelp : a -> (a -> String) -> List a -> String -> Maybe (Previous a)
 findPreviousHelp previous uniqueId entries currentId =
     case entries of
         [] ->
@@ -2359,7 +2316,7 @@ findPreviousHelp previous uniqueId entries currentId =
 
 
 
--- NEXT
+---- NEXT
 
 
 type Next a
@@ -2382,12 +2339,7 @@ findNext uniqueId entries currentId =
                 Just (findNextHelp first uniqueId rest currentId)
 
 
-findNextHelp :
-    a
-    -> (a -> String)
-    -> List a
-    -> String
-    -> Next a
+findNextHelp : a -> (a -> String) -> List a -> String -> Next a
 findNextHelp first uniqueId entries currentId =
     case entries of
         [] ->
@@ -2404,7 +2356,7 @@ findNextHelp first uniqueId entries currentId =
 
 
 
--- RANGE
+---- RANGE
 
 
 range : (a -> String) -> List a -> String -> String -> List a
