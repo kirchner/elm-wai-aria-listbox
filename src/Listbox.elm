@@ -2221,22 +2221,7 @@ listToMaybe listA =
 
 find : (a -> String) -> List a -> String -> Maybe a
 find uniqueId entries selectedId =
-    findHelp 0 uniqueId entries selectedId
-        |> Maybe.map Tuple.second
-
-
-findHelp : Int -> (a -> String) -> List a -> String -> Maybe ( Int, a )
-findHelp index uniqueId entries selectedId =
-    case entries of
-        [] ->
-            Nothing
-
-        entry :: rest ->
-            if uniqueId entry == selectedId then
-                Just ( index, entry )
-
-            else
-                findHelp (index + 1) uniqueId rest selectedId
+    List.find (\entry -> uniqueId entry == selectedId) entries
 
 
 findWith : (String -> a -> Bool) -> (a -> String) -> String -> List a -> String -> Maybe String
