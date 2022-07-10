@@ -6,8 +6,6 @@ module Listbox exposing
     , TypeAhead, noTypeAhead, simpleTypeAhead, typeAhead
     , Views, html
     , custom, ListboxAttrs, OptionAttrs
-    , viewUnique, updateUnique
-    , focusEntryUnique, focusNextOrFirstEntryUnique, focusPreviousOrFirstEntryUnique
     , focusedEntry, focusedEntryId, hoveredEntry
     , focusEntry, focusNextOrFirstEntry, focusPreviousOrFirstEntry
     , focus
@@ -50,17 +48,6 @@ interactions this widget offers.
 ## Advanced customization
 
 @docs custom, ListboxAttrs, OptionAttrs
-
-
-# Unique selection
-
-If you need a `Listbox` allowing only **at most one** selection. You just have
-to replace the `view`, `update`, ... functions with the following ones in this
-section.
-
-@docs viewUnique, updateUnique
-
-@docs focusEntryUnique, focusNextOrFirstEntryUnique, focusPreviousOrFirstEntryUnique
 
 
 # Advanced usage
@@ -240,9 +227,6 @@ You can customize the behaviour of the listbox with the following options:
   - **separateFocus**: Whether the mouse focus and the keyboard focus can be
     different.
 
-  - **selectionFollowsFocus**: Do we automatically add the entry gaining
-    keyboard focus to the selection?
-
   - **handleHomeAndEnd**: Should we handle the `Home` and `End` keys (to jump
     to the top or bottom of the list)?
 
@@ -264,7 +248,6 @@ A behaviour configuration could look something like this:
     behaviour =
         { jumpAtEnds = True
         , separateFocus = True
-        , selectionFollowsFocus = False
         , handleHomeAndEnd = True
         , typeAhead = simpleTypeAhead 300 identity
         , minimalGap = 30
@@ -273,15 +256,12 @@ A behaviour configuration could look something like this:
 
 The listbox will behave as explained in the [WAI-ARIA Authoring Practices
 1.1](https://www.w3.org/TR/wai-aria-practices-1.1/#Listbox) in the _Keyboard
-Interaction_ section. Note that you get the _recommended selection model_ if
-you choose `selectionFollowsFocus = False`, and the _alternative
-selection model_ for `selectionFollowsFocus = True`.
+Interaction_ section.
 
 -}
 type alias Behaviour a =
     { jumpAtEnds : Bool
     , separateFocus : Bool
-    , selectionFollowsFocus : Bool
     , handleHomeAndEnd : Bool
     , typeAhead : TypeAhead a
     , minimalGap : Float
@@ -438,7 +418,7 @@ updateHelp :
     -> List a
     -> ( Data, Cmd (Msg a), List a )
 updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
-    case msg of
+    case Debug.log "msg" msg of
         NoOp ->
             ( data, Cmd.none, selection )
 
@@ -504,27 +484,15 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
                 hash =
                     uniqueId a
             in
-            if behaviour.selectionFollowsFocus then
-                ( { data
-                    | query = NoQuery
-                    , focus = Focus hash
-                    , hover = Just hash
-                  }
-                , Cmd.none
-                , selection
-                )
-                    |> select config a selection
-
-            else
-                ( { data
-                    | query = NoQuery
-                    , focus = Focus hash
-                    , hover = Just hash
-                  }
-                , Cmd.none
-                , selection
-                )
-                    |> toggle config a
+            ( { data
+                | query = NoQuery
+                , focus = Focus hash
+                , hover = Just hash
+              }
+            , Cmd.none
+            , selection
+            )
+                |> toggle config a
 
         -- ARROW KEYS
         ListArrowUpDown id ->
@@ -590,13 +558,7 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
                         ( x, y ) =
                             newPosition behaviour entryDomData
                     in
-                    if behaviour.selectionFollowsFocus && not shiftDown then
-                        ( newData
-                        , setViewportOf id x y
-                        , [ a ]
-                        )
-
-                    else if shiftDown then
+                    if shiftDown then
                         ( newData
                         , setViewportOf id x y
                         , selection
@@ -633,13 +595,7 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
                                 Down ->
                                     setViewportOf id viewport.viewport.x 0
                     in
-                    if behaviour.selectionFollowsFocus && not shiftDown then
-                        ( newData
-                        , effect
-                        , [ a ]
-                        )
-
-                    else if shiftDown then
+                    if shiftDown then
                         ( newData
                         , effect
                         , selection
@@ -906,25 +862,14 @@ initFocus ({ uniqueId, behaviour } as config) allEntries data selection id =
             let
                 hash =
                     uniqueId a
-
-                newData =
-                    { data
-                        | query = NoQuery
-                        , focus = Focus hash
-                    }
             in
-            if behaviour.selectionFollowsFocus then
-                ( newData
-                , attemptToScrollToOption behaviour id hash Nothing
-                , selection
-                )
-                    |> select config a []
-
-            else
-                ( newData
-                , attemptToScrollToOption behaviour id hash Nothing
-                , selection
-                )
+            ( { data
+                | query = NoQuery
+                , focus = Focus hash
+              }
+            , attemptToScrollToOption behaviour id hash Nothing
+            , selection
+            )
 
 
 scheduleFocusPrevious :
@@ -955,28 +900,6 @@ scheduleFocusPrevious ({ uniqueId, behaviour } as config) allEntries data select
                 , getViewportOfList id Up a
                 , selection
                 )
-
-            else if behaviour.selectionFollowsFocus then
-                case find uniqueId allEntries current of
-                    Nothing ->
-                        ( { data | query = NoQuery }
-                        , Cmd.none
-                        , selection
-                        )
-
-                    Just currentA ->
-                        if shiftDown then
-                            ( { data | query = NoQuery }
-                            , Cmd.none
-                            , selection
-                            )
-                                |> toggle config currentA
-
-                        else
-                            ( { data | query = NoQuery }
-                            , Cmd.none
-                            , [ currentA ]
-                            )
 
             else
                 ( { data | query = NoQuery }
@@ -1035,28 +958,6 @@ scheduleFocusNext ({ uniqueId, behaviour } as config) allEntries data selection 
                 , getViewportOfList id Down a
                 , selection
                 )
-
-            else if behaviour.selectionFollowsFocus then
-                case find uniqueId allEntries current of
-                    Nothing ->
-                        ( { data | query = NoQuery }
-                        , Cmd.none
-                        , selection
-                        )
-
-                    Just currentA ->
-                        if shiftDown then
-                            ( { data | query = NoQuery }
-                            , Cmd.none
-                            , selection
-                            )
-                                |> toggle config currentA
-
-                        else
-                            ( { data | query = NoQuery }
-                            , Cmd.none
-                            , [ currentA ]
-                            )
 
             else
                 ( { data | query = NoQuery }
@@ -1127,29 +1028,6 @@ toggle { uniqueId } a ( newData, effect, newSelection ) =
         )
 
 
-{-| Use this function instead of `update` if the user can only
-select **at most one** entry in the listbox. The only difference between the
-type signature of this function and the one of `update` is that the last
-argument is a `Maybe a` instead of a `List a`.
--}
-updateUnique :
-    { uniqueId : a -> String
-    , behaviour : Behaviour a
-    }
-    -> List a
-    -> Msg a
-    -> Listbox
-    -> Maybe a
-    -> ( Listbox, Cmd (Msg a), Maybe a )
-updateUnique config allEntries msg listbox selection =
-    let
-        ( newListbox, cmd, newSelection ) =
-            update config allEntries msg listbox <|
-                maybeToList selection
-    in
-    ( newListbox, cmd, listToMaybe newSelection )
-
-
 {-| Sets the keyboard focus to the provided options.
 
 **Note**: This will not adjust the scroll position of the listbox, so you might
@@ -1170,30 +1048,8 @@ focusEntry config newEntry (Listbox listbox) selection =
             | query = NoQuery
             , focus = Focus (config.uniqueId newEntry)
         }
-    , if config.behaviour.selectionFollowsFocus then
-        [ newEntry ]
-
-      else
-        selection
+    , selection
     )
-
-
-{-| Sets the keyboard focus to the provided options.
-
-**Note**: This will not adjust the scroll position of the listbox, so you might
-want to apply `scrollToFocus` afterwards.
-
--}
-focusEntryUnique :
-    { uniqueId : a -> String
-    , behaviour : Behaviour a
-    }
-    -> a
-    -> Listbox
-    -> Maybe a
-    -> ( Listbox, Maybe a )
-focusEntryUnique config newEntry listbox selection =
-    withUnique selection (focusEntry config newEntry listbox)
 
 
 {-| Sets the keyboard focus to the next option. If `jumpAtEnds` is true and the
@@ -1241,38 +1097,9 @@ focusNextOrFirstEntry config allEntries (Listbox listbox) selection =
             ( Listbox listbox, selection )
 
         Just a ->
-            let
-                newListbox =
-                    Listbox { listbox | focus = Focus (uniqueId a) }
-            in
-            if behaviour.selectionFollowsFocus then
-                ( newListbox
-                , [ a ]
-                )
-
-            else
-                ( newListbox
-                , selection
-                )
-
-
-{-| Sets the keyboard focus to the next option. If `jumpAtEnds` is true and the
-focus is already on the last option, the first option is selected.
-
-**Note**: This will not adjust the scroll position of the listbox, so you might
-want to apply `scrollToFocus` afterwards.
-
--}
-focusNextOrFirstEntryUnique :
-    { uniqueId : a -> String
-    , behaviour : Behaviour a
-    }
-    -> List a
-    -> Listbox
-    -> Maybe a
-    -> ( Listbox, Maybe a )
-focusNextOrFirstEntryUnique config allEntries listbox selection =
-    withUnique selection (focusNextOrFirstEntry config allEntries listbox)
+            ( Listbox { listbox | focus = Focus (uniqueId a) }
+            , selection
+            )
 
 
 {-| Sets the keyboard focus to the previous option. If `jumpAtEnds` is true and the
@@ -1320,38 +1147,9 @@ focusPreviousOrFirstEntry config allEntries (Listbox listbox) selection =
             ( Listbox listbox, selection )
 
         Just a ->
-            let
-                newListbox =
-                    Listbox { listbox | focus = Focus (uniqueId a) }
-            in
-            if behaviour.selectionFollowsFocus then
-                ( newListbox
-                , [ a ]
-                )
-
-            else
-                ( newListbox
-                , selection
-                )
-
-
-{-| Sets the keyboard focus to the previous option. If `jumpAtEnds` is true and the
-focus is already on the first option, the first option is selected.
-
-**Note**: This will not adjust the scroll position of the listbox, so you might
-want to apply `scrollToFocus` afterwards.
-
--}
-focusPreviousOrFirstEntryUnique :
-    { uniqueId : a -> String
-    , behaviour : Behaviour a
-    }
-    -> List a
-    -> Listbox
-    -> Maybe a
-    -> ( Listbox, Maybe a )
-focusPreviousOrFirstEntryUnique config allEntries listbox selection =
-    withUnique selection (focusPreviousOrFirstEntry config allEntries listbox)
+            ( Listbox { listbox | focus = Focus (uniqueId a) }
+            , selection
+            )
 
 
 
@@ -1676,7 +1474,7 @@ type alias ListboxAttrs msg =
 type alias OptionAttrs msg =
     { id : String
     , role : String
-    , ariaSelected : Maybe String
+    , ariaChecked : String
     , onMouseenter : msg
     , onMouseleave : msg
     , onClick : msg
@@ -1815,24 +1613,15 @@ html config =
                 let
                     htmlDetails =
                         config.li state a
-
-                    addAriaSelected htmlAttrs =
-                        case attrs.ariaSelected of
-                            Nothing ->
-                                htmlAttrs
-
-                            Just ariaSelected ->
-                                Attributes.attribute "aria-selected" ariaSelected :: htmlAttrs
                 in
                 Html.li
-                    (([ Attributes.id attrs.id
-                      , Attributes.attribute "role" attrs.role
-                      , Events.onMouseEnter attrs.onMouseenter
-                      , Events.onMouseLeave attrs.onMouseleave
-                      , Events.onClick attrs.onClick
-                      ]
-                        |> addAriaSelected
-                     )
+                    ([ Attributes.id attrs.id
+                     , Attributes.attribute "role" attrs.role
+                     , Attributes.attribute "aria-checked" attrs.ariaChecked
+                     , Events.onMouseEnter attrs.onMouseenter
+                     , Events.onMouseLeave attrs.onMouseleave
+                     , Events.onClick attrs.onClick
+                     ]
                         ++ htmlDetails.attributes
                     )
                     htmlDetails.children
@@ -1887,49 +1676,11 @@ view :
     -> Listbox
     -> List a
     -> node
-view =
-    viewHelp True
-
-
-{-| Use this instead of `view` if the user can only select **at
-most one** entry in the listbox. The only difference between the type signature
-of this function and the one of `view` is that the last argument is a `Maybe a`
-instead of a `List a`.
--}
-viewUnique :
-    Views a node msg
-    ->
-        { uniqueId : a -> String
-        , focusable : Bool
-        , markActiveDescendant : Bool
-        }
-    -> Instance a msg
-    -> List a
-    -> Listbox
-    -> Maybe a
-    -> node
-viewUnique views config instance entries listbox selection =
-    viewHelp False views config instance entries listbox (maybeToList selection)
-
-
-viewHelp :
-    Bool
-    -> Views a node msg
-    ->
-        { uniqueId : a -> String
-        , focusable : Bool
-        , markActiveDescendant : Bool
-        }
-    -> Instance a msg
-    -> List a
-    -> Listbox
-    -> List a
-    -> node
-viewHelp multiSelectable (Views views) config instance allEntries (Listbox data) selection =
+view (Views views) config instance allEntries (Listbox data) selection =
     views.listbox
         { id = printListId instance.id
         , role = "listbox"
-        , ariaMultiselectable = stringFromBool multiSelectable
+        , ariaMultiselectable = "true"
         , ariaLabelledby =
             case instance.label of
                 LabelledBy id ->
@@ -1975,25 +1726,21 @@ viewHelp multiSelectable (Views views) config instance allEntries (Listbox data)
         , onFocus = instance.lift (ListFocused instance.id)
         , onBlur = instance.lift ListBlured
         }
-        { options =
-            List.map (viewOption multiSelectable views.option config instance selection data)
-                allEntries
+        { options = List.map (viewOption views.option config instance selection data) allEntries
         }
 
 
 viewOption :
-    Bool
-    ->
-        (OptionAttrs msg
-         ->
-            { selected : Bool
-            , focused : Bool
-            , hovered : Bool
-            , maybeQuery : Maybe String
-            }
-         -> a
-         -> node
-        )
+    (OptionAttrs msg
+     ->
+        { selected : Bool
+        , focused : Bool
+        , hovered : Bool
+        , maybeQuery : Maybe String
+        }
+     -> a
+     -> node
+    )
     ->
         { uniqueId : a -> String
         , focusable : Bool
@@ -2004,7 +1751,7 @@ viewOption :
     -> Data
     -> a
     -> node
-viewOption multiSelectable toNode config instance selection data option =
+viewOption toNode config instance selection data option =
     let
         maybeHash =
             Just (config.uniqueId option)
@@ -2018,15 +1765,7 @@ viewOption multiSelectable toNode config instance selection data option =
     toNode
         { id = printEntryId instance.id hash
         , role = "option"
-        , ariaSelected =
-            if multiSelectable then
-                Just (stringFromBool selected)
-
-            else if selected then
-                Just "true"
-
-            else
-                Nothing
+        , ariaChecked = stringFromBool selected
         , onMouseenter = instance.lift (EntryMouseEntered hash)
         , onMouseleave = instance.lift EntryMouseLeft
         , onClick = instance.lift (EntryClicked option)
@@ -2272,15 +2011,6 @@ newPosition behaviour entryDomData =
         ( viewport.x
         , viewport.y
         )
-
-
-withUnique : Maybe a -> (List a -> ( Listbox, List a )) -> ( Listbox, Maybe a )
-withUnique selection func =
-    let
-        ( listbox, list ) =
-            func (maybeToList selection)
-    in
-    ( listbox, listToMaybe list )
 
 
 
