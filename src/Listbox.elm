@@ -453,11 +453,6 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
                 |> fromModel
                 |> withSelection (List.uniqueBy uniqueId (a :: listA ++ newSelection))
 
-        unselect a ( newData, effect, newSelection ) =
-            newData
-                |> fromModel
-                |> withSelection (List.filter (\b -> a /= b) newSelection)
-
         toggle a ( newData, effect, newSelection ) =
             if List.member a newSelection then
                 newData
@@ -468,154 +463,6 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
                 { newData | maybeLastSelectedEntry = Just (uniqueId a) }
                     |> fromModel
                     |> withSelection (List.uniqueBy uniqueId (a :: newSelection))
-
-        -- FOCUS
-        initFocus id =
-            let
-                maybeA =
-                    data.focus
-                        |> currentFocus
-                        |> or data.maybeLastSelectedEntry
-                        |> Maybe.andThen (find uniqueId allEntries)
-                        |> or (List.head selection)
-                        |> Maybe.andThen (uniqueId >> find uniqueId allEntries)
-                        |> or (List.head allEntries)
-            in
-            case maybeA of
-                Nothing ->
-                    fromModel { data | query = NoQuery }
-
-                Just a ->
-                    let
-                        hash =
-                            uniqueId a
-
-                        newData =
-                            { data
-                                | query = NoQuery
-                                , focus = Focus hash
-                            }
-                    in
-                    if behaviour.selectionFollowsFocus then
-                        newData
-                            |> fromModel
-                            |> withEffect (attemptToScrollToOption behaviour id hash Nothing)
-                            |> select a []
-
-                    else
-                        newData
-                            |> fromModel
-                            |> withEffect (attemptToScrollToOption behaviour id hash Nothing)
-
-        scheduleFocusPrevious id shiftDown current =
-            case findPrevious uniqueId allEntries current of
-                Just (Last a) ->
-                    if behaviour.jumpAtEnds then
-                        { data
-                            | query = NoQuery
-                            , focus =
-                                Pending
-                                    { id = id
-                                    , current = current
-                                    , pending = uniqueId a
-                                    , shiftDown = shiftDown
-                                    }
-                        }
-                            |> fromModel
-                            |> withEffect (getViewportOfList id Up a)
-
-                    else if behaviour.selectionFollowsFocus then
-                        case find uniqueId allEntries current of
-                            Nothing ->
-                                fromModel { data | query = NoQuery }
-
-                            Just currentA ->
-                                if shiftDown then
-                                    fromModel { data | query = NoQuery }
-                                        |> toggle currentA
-
-                                else
-                                    fromModel { data | query = NoQuery }
-                                        |> withSelection [ currentA ]
-
-                    else
-                        fromModel { data | query = NoQuery }
-
-                Just (Previous a) ->
-                    let
-                        hash =
-                            uniqueId a
-                    in
-                    { data
-                        | query = NoQuery
-                        , focus =
-                            Pending
-                                { id = id
-                                , current = current
-                                , pending = hash
-                                , shiftDown = shiftDown
-                                }
-                    }
-                        |> fromModel
-                        |> withEffect (attemptToGetDomInfoOption id hash current a)
-
-                Nothing ->
-                    initFocus id
-
-        scheduleFocusNext id shiftDown current =
-            case findNext uniqueId allEntries current of
-                Just (First a) ->
-                    if behaviour.jumpAtEnds then
-                        { data
-                            | query = NoQuery
-                            , focus =
-                                Pending
-                                    { id = id
-                                    , current = current
-                                    , pending = uniqueId a
-                                    , shiftDown = shiftDown
-                                    }
-                        }
-                            |> fromModel
-                            |> withEffect (getViewportOfList id Down a)
-
-                    else if behaviour.selectionFollowsFocus then
-                        case find uniqueId allEntries current of
-                            Nothing ->
-                                fromModel { data | query = NoQuery }
-
-                            Just currentA ->
-                                if shiftDown then
-                                    fromModel { data | query = NoQuery }
-                                        |> toggle currentA
-
-                                else
-                                    fromModel { data | query = NoQuery }
-                                        |> withSelection [ currentA ]
-
-                    else
-                        fromModel { data | query = NoQuery }
-
-                Just (Next a) ->
-                    let
-                        hash =
-                            uniqueId a
-                    in
-                    { data
-                        | query = NoQuery
-                        , focus =
-                            Pending
-                                { id = id
-                                , current = current
-                                , pending = hash
-                                , shiftDown = shiftDown
-                                }
-                    }
-                        |> fromModel
-                        |> withEffect (attemptToGetDomInfoOption id hash current a)
-
-                Nothing ->
-                    initFocus id
     in
     case msg of
         NoOp ->
@@ -713,7 +560,7 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
                 ( data, Cmd.none, selection )
 
             else
-                initFocus id
+                initFocus config allEntries data selection id
 
         ListBlured ->
             fromModel
@@ -725,10 +572,10 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
         ListArrowUpDown id ->
             case data.focus of
                 NoFocus ->
-                    initFocus id
+                    initFocus config allEntries data selection id
 
                 Focus hash ->
-                    scheduleFocusPrevious id False hash
+                    scheduleFocusPrevious config allEntries data selection id False hash
 
                 Pending _ ->
                     ( data, Cmd.none, selection )
@@ -736,10 +583,10 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
         ListShiftArrowUpDown id ->
             case data.focus of
                 NoFocus ->
-                    initFocus id
+                    initFocus config allEntries data selection id
 
                 Focus hash ->
-                    scheduleFocusPrevious id True hash
+                    scheduleFocusPrevious config allEntries data selection id True hash
 
                 Pending _ ->
                     ( data, Cmd.none, selection )
@@ -747,10 +594,10 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
         ListArrowDownDown id ->
             case data.focus of
                 NoFocus ->
-                    initFocus id
+                    initFocus config allEntries data selection id
 
                 Focus hash ->
-                    scheduleFocusNext id False hash
+                    scheduleFocusNext config allEntries data selection id False hash
 
                 Pending _ ->
                     ( data, Cmd.none, selection )
@@ -758,10 +605,10 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
         ListShiftArrowDownDown id ->
             case data.focus of
                 NoFocus ->
-                    initFocus id
+                    initFocus config allEntries data selection id
 
                 Focus hash ->
-                    scheduleFocusNext id True hash
+                    scheduleFocusNext config allEntries data selection id True hash
 
                 Pending _ ->
                     ( data, Cmd.none, selection )
@@ -1017,6 +864,256 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
                 }
                     |> fromModel
                     |> toggle a
+
+
+
+-- FOCUS
+
+
+initFocus :
+    { uniqueId : a -> String
+    , behaviour : Behaviour a
+    }
+    -> List a
+    -> Data
+    -> List a
+    -> String
+    -> ( Data, Cmd (Msg a), List a )
+initFocus { uniqueId, behaviour } allEntries data selection id =
+    let
+        maybeA =
+            data.focus
+                |> currentFocus
+                |> or data.maybeLastSelectedEntry
+                |> Maybe.andThen (find uniqueId allEntries)
+                |> or (List.head selection)
+                |> Maybe.andThen (uniqueId >> find uniqueId allEntries)
+                |> or (List.head allEntries)
+
+        select a listA ( newData, effect, newSelection ) =
+            { newData | maybeLastSelectedEntry = Just (uniqueId a) }
+                |> fromModel
+                |> withSelection (List.uniqueBy uniqueId (a :: listA ++ newSelection))
+
+        fromModel newData =
+            ( newData
+            , Cmd.none
+            , selection
+            )
+
+        withEffect effect ( newData, _, newSelection ) =
+            ( newData, effect, newSelection )
+
+        withSelection newSelection ( newData, effect, _ ) =
+            ( newData, effect, newSelection )
+    in
+    case maybeA of
+        Nothing ->
+            fromModel { data | query = NoQuery }
+
+        Just a ->
+            let
+                hash =
+                    uniqueId a
+
+                newData =
+                    { data
+                        | query = NoQuery
+                        , focus = Focus hash
+                    }
+            in
+            if behaviour.selectionFollowsFocus then
+                newData
+                    |> fromModel
+                    |> withEffect (attemptToScrollToOption behaviour id hash Nothing)
+                    |> select a []
+
+            else
+                newData
+                    |> fromModel
+                    |> withEffect (attemptToScrollToOption behaviour id hash Nothing)
+
+
+scheduleFocusPrevious :
+    { uniqueId : a -> String
+    , behaviour : Behaviour a
+    }
+    -> List a
+    -> Data
+    -> List a
+    -> String
+    -> Bool
+    -> String
+    -> ( Data, Cmd (Msg a), List a )
+scheduleFocusPrevious ({ uniqueId, behaviour } as config) allEntries data selection id shiftDown current =
+    let
+        fromModel newData =
+            ( newData
+            , Cmd.none
+            , selection
+            )
+
+        withEffect effect ( newData, _, newSelection ) =
+            ( newData, effect, newSelection )
+
+        withSelection newSelection ( newData, effect, _ ) =
+            ( newData, effect, newSelection )
+
+        toggle a ( newData, effect, newSelection ) =
+            if List.member a newSelection then
+                newData
+                    |> fromModel
+                    |> withSelection (List.filter (\b -> a /= b) newSelection)
+
+            else
+                { newData | maybeLastSelectedEntry = Just (uniqueId a) }
+                    |> fromModel
+                    |> withSelection (List.uniqueBy uniqueId (a :: newSelection))
+    in
+    case findPrevious uniqueId allEntries current of
+        Just (Last a) ->
+            if behaviour.jumpAtEnds then
+                { data
+                    | query = NoQuery
+                    , focus =
+                        Pending
+                            { id = id
+                            , current = current
+                            , pending = uniqueId a
+                            , shiftDown = shiftDown
+                            }
+                }
+                    |> fromModel
+                    |> withEffect (getViewportOfList id Up a)
+
+            else if behaviour.selectionFollowsFocus then
+                case find uniqueId allEntries current of
+                    Nothing ->
+                        fromModel { data | query = NoQuery }
+
+                    Just currentA ->
+                        if shiftDown then
+                            fromModel { data | query = NoQuery }
+                                |> toggle currentA
+
+                        else
+                            fromModel { data | query = NoQuery }
+                                |> withSelection [ currentA ]
+
+            else
+                fromModel { data | query = NoQuery }
+
+        Just (Previous a) ->
+            let
+                hash =
+                    uniqueId a
+            in
+            { data
+                | query = NoQuery
+                , focus =
+                    Pending
+                        { id = id
+                        , current = current
+                        , pending = hash
+                        , shiftDown = shiftDown
+                        }
+            }
+                |> fromModel
+                |> withEffect (attemptToGetDomInfoOption id hash current a)
+
+        Nothing ->
+            initFocus config allEntries data selection id
+
+
+scheduleFocusNext :
+    { uniqueId : a -> String
+    , behaviour : Behaviour a
+    }
+    -> List a
+    -> Data
+    -> List a
+    -> String
+    -> Bool
+    -> String
+    -> ( Data, Cmd (Msg a), List a )
+scheduleFocusNext ({ uniqueId, behaviour } as config) allEntries data selection id shiftDown current =
+    let
+        fromModel newData =
+            ( newData
+            , Cmd.none
+            , selection
+            )
+
+        withEffect effect ( newData, _, newSelection ) =
+            ( newData, effect, newSelection )
+
+        withSelection newSelection ( newData, effect, _ ) =
+            ( newData, effect, newSelection )
+
+        toggle a ( newData, effect, newSelection ) =
+            if List.member a newSelection then
+                newData
+                    |> fromModel
+                    |> withSelection (List.filter (\b -> a /= b) newSelection)
+
+            else
+                { newData | maybeLastSelectedEntry = Just (uniqueId a) }
+                    |> fromModel
+                    |> withSelection (List.uniqueBy uniqueId (a :: newSelection))
+    in
+    case findNext uniqueId allEntries current of
+        Just (First a) ->
+            if behaviour.jumpAtEnds then
+                { data
+                    | query = NoQuery
+                    , focus =
+                        Pending
+                            { id = id
+                            , current = current
+                            , pending = uniqueId a
+                            , shiftDown = shiftDown
+                            }
+                }
+                    |> fromModel
+                    |> withEffect (getViewportOfList id Down a)
+
+            else if behaviour.selectionFollowsFocus then
+                case find uniqueId allEntries current of
+                    Nothing ->
+                        fromModel { data | query = NoQuery }
+
+                    Just currentA ->
+                        if shiftDown then
+                            fromModel { data | query = NoQuery }
+                                |> toggle currentA
+
+                        else
+                            fromModel { data | query = NoQuery }
+                                |> withSelection [ currentA ]
+
+            else
+                fromModel { data | query = NoQuery }
+
+        Just (Next a) ->
+            let
+                hash =
+                    uniqueId a
+            in
+            { data
+                | query = NoQuery
+                , focus =
+                    Pending
+                        { id = id
+                        , current = current
+                        , pending = hash
+                        , shiftDown = shiftDown
+                        }
+            }
+                |> fromModel
+                |> withEffect (attemptToGetDomInfoOption id hash current a)
+
+        Nothing ->
+            initFocus config allEntries data selection id
 
 
 {-| Use this function instead of `update` if the user can only
