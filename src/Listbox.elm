@@ -434,27 +434,6 @@ updateHelp :
     -> List a
     -> ( Data, Cmd (Msg a), List a )
 updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
-    let
-        -- SELECTION
-        select a listA ( newData, effect, newSelection ) =
-            ( { newData | maybeLastSelectedEntry = Just (uniqueId a) }
-            , Cmd.none
-            , List.uniqueBy uniqueId (a :: listA ++ newSelection)
-            )
-
-        toggle a ( newData, effect, newSelection ) =
-            if List.member a newSelection then
-                ( newData
-                , Cmd.none
-                , List.filter (\b -> a /= b) newSelection
-                )
-
-            else
-                ( { newData | maybeLastSelectedEntry = Just (uniqueId a) }
-                , Cmd.none
-                , List.uniqueBy uniqueId (a :: newSelection)
-                )
-    in
     case msg of
         NoOp ->
             ( data, Cmd.none, selection )
@@ -489,7 +468,7 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
                         , setViewportOf id x y
                         , selection
                         )
-                            |> toggle a
+                            |> toggle config a
 
                     else
                         ( newData
@@ -536,7 +515,7 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
                         , effect
                         , selection
                         )
-                            |> toggle a
+                            |> toggle config a
 
                     else
                         ( newData
@@ -624,7 +603,7 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
 
                 Just a ->
                     ( data, Cmd.none, selection )
-                        |> toggle a
+                        |> toggle config a
 
         ListSpaceDown id ->
             case focusedEntry config.uniqueId allEntries (Listbox data) of
@@ -633,14 +612,12 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
 
                 Just a ->
                     ( data, Cmd.none, selection )
-                        |> toggle a
+                        |> toggle config a
 
         ListShiftSpaceDown id ->
             let
                 selected =
-                    Maybe.map2 (range uniqueId allEntries)
-                        (currentFocus data.focus)
-                        data.maybeLastSelectedEntry
+                    Maybe.map2 (range uniqueId allEntries) (currentFocus data.focus) data.maybeLastSelectedEntry
                         |> Maybe.withDefault []
             in
             case selected of
@@ -649,7 +626,7 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
 
                 a :: listA ->
                     ( data, Cmd.none, selection )
-                        |> select a listA
+                        |> select config a listA
 
         ListHomeDown id ->
             case List.head allEntries of
@@ -695,7 +672,7 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
                             , scrollListToTop id
                             , selection
                             )
-                                |> select a listA
+                                |> select config a listA
 
         ListEndDown id ->
             case lastEntry allEntries of
@@ -741,7 +718,7 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
                             , scrollListToBottom id
                             , selection
                             )
-                                |> select a listA
+                                |> select config a listA
 
         ListControlADown ->
             let
@@ -878,7 +855,7 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
                 , Cmd.none
                 , selection
                 )
-                    |> select a selection
+                    |> select config a selection
 
             else
                 ( { data
@@ -889,7 +866,7 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
                 , Cmd.none
                 , selection
                 )
-                    |> toggle a
+                    |> toggle config a
 
 
 
@@ -905,14 +882,7 @@ initFocus :
     -> List a
     -> String
     -> ( Data, Cmd (Msg a), List a )
-initFocus { uniqueId, behaviour } allEntries data selection id =
-    let
-        select a listA ( newData, effect, newSelection ) =
-            ( { newData | maybeLastSelectedEntry = Just (uniqueId a) }
-            , Cmd.none
-            , List.uniqueBy uniqueId (a :: listA ++ newSelection)
-            )
-    in
+initFocus ({ uniqueId, behaviour } as config) allEntries data selection id =
     case
         data.focus
             |> currentFocus
@@ -944,7 +914,7 @@ initFocus { uniqueId, behaviour } allEntries data selection id =
                 , attemptToScrollToOption behaviour id hash Nothing
                 , selection
                 )
-                    |> select a []
+                    |> select config a []
 
             else
                 ( newData
@@ -965,20 +935,6 @@ scheduleFocusPrevious :
     -> String
     -> ( Data, Cmd (Msg a), List a )
 scheduleFocusPrevious ({ uniqueId, behaviour } as config) allEntries data selection id shiftDown current =
-    let
-        toggle a ( newData, effect, newSelection ) =
-            if List.member a newSelection then
-                ( newData
-                , Cmd.none
-                , List.filter (\b -> a /= b) newSelection
-                )
-
-            else
-                ( { newData | maybeLastSelectedEntry = Just (uniqueId a) }
-                , Cmd.none
-                , List.uniqueBy uniqueId (a :: newSelection)
-                )
-    in
     case findPrevious uniqueId allEntries current of
         Just (Last a) ->
             if behaviour.jumpAtEnds then
@@ -1010,7 +966,7 @@ scheduleFocusPrevious ({ uniqueId, behaviour } as config) allEntries data select
                             , Cmd.none
                             , selection
                             )
-                                |> toggle currentA
+                                |> toggle config currentA
 
                         else
                             ( { data | query = NoQuery }
@@ -1059,20 +1015,6 @@ scheduleFocusNext :
     -> String
     -> ( Data, Cmd (Msg a), List a )
 scheduleFocusNext ({ uniqueId, behaviour } as config) allEntries data selection id shiftDown current =
-    let
-        toggle a ( newData, effect, newSelection ) =
-            if List.member a newSelection then
-                ( newData
-                , Cmd.none
-                , List.filter (\b -> a /= b) newSelection
-                )
-
-            else
-                ( { newData | maybeLastSelectedEntry = Just (uniqueId a) }
-                , Cmd.none
-                , List.uniqueBy uniqueId (a :: newSelection)
-                )
-    in
     case findNext uniqueId allEntries current of
         Just (First a) ->
             if behaviour.jumpAtEnds then
@@ -1104,7 +1046,7 @@ scheduleFocusNext ({ uniqueId, behaviour } as config) allEntries data selection 
                             , Cmd.none
                             , selection
                             )
-                                |> toggle currentA
+                                |> toggle config currentA
 
                         else
                             ( { data | query = NoQuery }
@@ -1139,6 +1081,46 @@ scheduleFocusNext ({ uniqueId, behaviour } as config) allEntries data selection 
 
         Nothing ->
             initFocus config allEntries data selection id
+
+
+
+-- SELECTION
+
+
+select :
+    { uniqueId : a -> String
+    , behaviour : Behaviour a
+    }
+    -> a
+    -> List a
+    -> ( Data, Cmd (Msg a), List a )
+    -> ( Data, Cmd (Msg a), List a )
+select { uniqueId } a listA ( newData, effect, newSelection ) =
+    ( { newData | maybeLastSelectedEntry = Just (uniqueId a) }
+    , Cmd.none
+    , List.uniqueBy uniqueId (a :: listA ++ newSelection)
+    )
+
+
+toggle :
+    { uniqueId : a -> String
+    , behaviour : Behaviour a
+    }
+    -> a
+    -> ( Data, Cmd (Msg a), List a )
+    -> ( Data, Cmd (Msg a), List a )
+toggle { uniqueId } a ( newData, effect, newSelection ) =
+    if List.member a newSelection then
+        ( newData
+        , Cmd.none
+        , List.filter (\b -> a /= b) newSelection
+        )
+
+    else
+        ( { newData | maybeLastSelectedEntry = Just (uniqueId a) }
+        , Cmd.none
+        , List.uniqueBy uniqueId (a :: newSelection)
+        )
 
 
 {-| Use this function instead of `update` if the user can only
