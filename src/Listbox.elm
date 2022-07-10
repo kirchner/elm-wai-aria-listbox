@@ -435,12 +435,6 @@ updateHelp :
     -> ( Data, Cmd (Msg a), List a )
 updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
     let
-        unchanged =
-            ( data
-            , Cmd.none
-            , selection
-            )
-
         fromModel newData =
             ( newData
             , Cmd.none
@@ -625,18 +619,18 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
     in
     case msg of
         NoOp ->
-            unchanged
+            ( data, Cmd.none, selection )
 
         BrowserReturnedDomInfoOption a (Err id) ->
-            unchanged
+            ( data, Cmd.none, selection )
 
         BrowserReturnedDomInfoOption a (Ok entryDomData) ->
             case data.focus of
                 NoFocus ->
-                    unchanged
+                    ( data, Cmd.none, selection )
 
                 Focus _ ->
-                    unchanged
+                    ( data, Cmd.none, selection )
 
                 Pending { id, pending, shiftDown } ->
                     let
@@ -663,15 +657,15 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
                             |> withEffect (setViewportOf id x y)
 
         ViewportOfListReceived direction a (Err id) ->
-            unchanged
+            ( data, Cmd.none, selection )
 
         ViewportOfListReceived direction a (Ok viewport) ->
             case data.focus of
                 NoFocus ->
-                    unchanged
+                    ( data, Cmd.none, selection )
 
                 Focus _ ->
-                    unchanged
+                    ( data, Cmd.none, selection )
 
                 Pending { id, pending, shiftDown } ->
                     let
@@ -716,7 +710,7 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
 
         ListFocused id ->
             if data.preventScroll then
-                unchanged
+                ( data, Cmd.none, selection )
 
             else
                 initFocus id
@@ -737,7 +731,7 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
                     scheduleFocusPrevious id False hash
 
                 Pending _ ->
-                    unchanged
+                    ( data, Cmd.none, selection )
 
         ListShiftArrowUpDown id ->
             case data.focus of
@@ -748,7 +742,7 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
                     scheduleFocusPrevious id True hash
 
                 Pending _ ->
-                    unchanged
+                    ( data, Cmd.none, selection )
 
         ListArrowDownDown id ->
             case data.focus of
@@ -759,7 +753,7 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
                     scheduleFocusNext id False hash
 
                 Pending _ ->
-                    unchanged
+                    ( data, Cmd.none, selection )
 
         ListShiftArrowDownDown id ->
             case data.focus of
@@ -770,24 +764,24 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
                     scheduleFocusNext id True hash
 
                 Pending _ ->
-                    unchanged
+                    ( data, Cmd.none, selection )
 
         ListEnterDown id ->
             case focusedEntry config.uniqueId allEntries (Listbox data) of
                 Nothing ->
-                    unchanged
+                    ( data, Cmd.none, selection )
 
                 Just a ->
-                    unchanged
+                    ( data, Cmd.none, selection )
                         |> toggle a
 
         ListSpaceDown id ->
             case focusedEntry config.uniqueId allEntries (Listbox data) of
                 Nothing ->
-                    unchanged
+                    ( data, Cmd.none, selection )
 
                 Just a ->
-                    unchanged
+                    ( data, Cmd.none, selection )
                         |> toggle a
 
         ListShiftSpaceDown id ->
@@ -800,16 +794,16 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
             in
             case selected of
                 [] ->
-                    unchanged
+                    ( data, Cmd.none, selection )
 
                 a :: listA ->
-                    unchanged
+                    ( data, Cmd.none, selection )
                         |> select a listA
 
         ListHomeDown id ->
             case List.head allEntries of
                 Nothing ->
-                    unchanged
+                    ( data, Cmd.none, selection )
 
                 Just a ->
                     { data
@@ -822,7 +816,7 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
         ListControlShiftHomeDown id ->
             case Maybe.map uniqueId (List.head allEntries) of
                 Nothing ->
-                    unchanged
+                    ( data, Cmd.none, selection )
 
                 Just hash ->
                     let
@@ -834,7 +828,7 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
                     in
                     case selected of
                         [] ->
-                            unchanged
+                            ( data, Cmd.none, selection )
 
                         a :: listA ->
                             { data
@@ -853,7 +847,7 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
         ListEndDown id ->
             case lastEntry allEntries of
                 Nothing ->
-                    unchanged
+                    ( data, Cmd.none, selection )
 
                 Just a ->
                     { data
@@ -866,7 +860,7 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
         ListControlShiftEndDown id ->
             case Maybe.map uniqueId (lastEntry allEntries) of
                 Nothing ->
-                    unchanged
+                    ( data, Cmd.none, selection )
 
                 Just hash ->
                     let
@@ -878,7 +872,7 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
                     in
                     case selected of
                         [] ->
-                            unchanged
+                            ( data, Cmd.none, selection )
 
                         a :: listA ->
                             { data
@@ -907,27 +901,27 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
                         |> Set.fromList
             in
             if Set.isEmpty (Set.diff allEntriesSet selectionSet) then
-                unchanged
+                ( data, Cmd.none, selection )
                     |> withSelection []
 
             else
-                unchanged
+                ( data, Cmd.none, selection )
                     |> withSelection allEntries
 
         -- QUERY
         ListKeyDown id key ->
             case behaviour.typeAhead of
                 NoTypeAhead ->
-                    unchanged
+                    ( data, Cmd.none, selection )
 
                 TypeAhead _ _ ->
-                    unchanged
+                    ( data, Cmd.none, selection )
                         |> withEffect (Task.perform (CurrentTimeReceived id key) Time.now)
 
         CurrentTimeReceived id key currentTime ->
             case behaviour.typeAhead of
                 NoTypeAhead ->
-                    unchanged
+                    ( data, Cmd.none, selection )
 
                 TypeAhead timeout matchesQuery ->
                     let
@@ -946,7 +940,7 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
                     in
                     case maybeHash of
                         Nothing ->
-                            unchanged
+                            ( data, Cmd.none, selection )
 
                         Just hash ->
                             { data
@@ -965,7 +959,7 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
         Tick currentTime ->
             case data.query of
                 NoQuery ->
-                    unchanged
+                    ( data, Cmd.none, selection )
 
                 Query timeout time _ ->
                     if
@@ -975,7 +969,7 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
                         fromModel { data | query = NoQuery }
 
                     else
-                        unchanged
+                        ( data, Cmd.none, selection )
 
         -- ENTRY
         EntryMouseEntered newFocus ->
