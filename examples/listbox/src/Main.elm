@@ -79,7 +79,6 @@ update msg model =
                         , behaviour =
                             { jumpAtEnds = True
                             , separateFocus = True
-                            , selectionFollowsFocus = False
                             , handleHomeAndEnd = True
                             , typeAhead = Listbox.simpleTypeAhead 200 identity
                             , minimalGap = 20

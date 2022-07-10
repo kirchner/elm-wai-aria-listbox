@@ -6,10 +6,10 @@ module Listbox exposing
     , TypeAhead, noTypeAhead, simpleTypeAhead, typeAhead
     , Views, html
     , custom, ListboxAttrs, OptionAttrs
-    , focusedEntry, focusedEntryId, hoveredEntry
-    , focusEntry, focusNextOrFirstEntry, focusPreviousOrFirstEntry
+    , optionActive, optionActiveId, optionHovered
+    , activateOption, activateNextOrFirstOption, activatePreviousOrFirstOption
     , focus
-    , scrollToFocus
+    , scrollToActiveOption
     , preventDefaultOnKeyDown
     )
 
@@ -55,19 +55,19 @@ interactions this widget offers.
 
 ## State info
 
-@docs focusedEntry, focusedEntryId, hoveredEntry
+@docs optionActive, optionActiveId, optionHovered
 
 
 ## State manipulation
 
-@docs focusEntry, focusNextOrFirstEntry, focusPreviousOrFirstEntry
+@docs activateOption, activateNextOrFirstOption, activatePreviousOrFirstOption
 
 
 ## DOM Stuff
 
 @docs focus
 
-@docs scrollToFocus
+@docs scrollToActiveOption
 
 @docs preventDefaultOnKeyDown
 
@@ -114,20 +114,18 @@ import Time exposing (Posix)
 
 
 {-| Tracks the keyboard and mouse focus as well as the current query. The full
-list of entries and the currently selected option(s) live in your own model.
+list of options and the currently selected option(s) live in your own model.
 -}
 type Listbox
     = Listbox Data
 
 
 type alias Data =
-    { preventScroll : Bool
+    { mousePressed : Bool
     , query : Query
-
-    -- FOCUS
-    , focus : Focus
-    , hover : Maybe String
-    , maybeLastSelectedEntry : Maybe String
+    , optionActive : ActiveOption
+    , optionHovered : Maybe String
+    , optionSelectedLast : Maybe String
     }
 
 
@@ -136,15 +134,28 @@ type Query
     | Query Int Time.Posix String
 
 
-type Focus
-    = NoFocus
-    | Focus String
-    | Pending
+type ActiveOption
+    = NoActiveOption
+    | ActivatingOption
         { id : String
-        , current : String
-        , pending : String
+        , optionCurrent : String
+        , optionPending : String
         , shiftDown : Bool
         }
+    | ActiveOption String
+
+
+optionActiveUniqueId : ActiveOption -> Maybe String
+optionActiveUniqueId theFocus =
+    case theFocus of
+        NoActiveOption ->
+            Nothing
+
+        ActivatingOption { optionCurrent } ->
+            Just optionCurrent
+
+        ActiveOption current ->
+            Just current
 
 
 {-| An initial listbox with no option focused.
@@ -152,44 +163,31 @@ type Focus
 init : Listbox
 init =
     Listbox
-        { preventScroll = False
+        { mousePressed = False
         , query = NoQuery
-        , focus = NoFocus
-        , hover = Nothing
-        , maybeLastSelectedEntry = Nothing
+        , optionActive = NoActiveOption
+        , optionHovered = Nothing
+        , optionSelectedLast = Nothing
         }
 
 
 {-| Returns the option which currently has keyboard focus.
 -}
-focusedEntry : (a -> String) -> List a -> Listbox -> Maybe a
-focusedEntry uniqueId allEntries (Listbox listbox) =
-    Maybe.andThen (find uniqueId allEntries) (currentFocus listbox.focus)
+optionActive : (a -> String) -> List a -> Listbox -> Maybe a
+optionActive uniqueId alloptions (Listbox listbox) =
+    Maybe.andThen (find uniqueId alloptions) (optionActiveUniqueId listbox.optionActive)
 
 
 {-| Returns the option which currently has mouse focus.
 -}
-hoveredEntry : (a -> String) -> List a -> Listbox -> Maybe a
-hoveredEntry uniqueId allEntries (Listbox listbox) =
-    Maybe.andThen (find uniqueId allEntries) listbox.hover
+optionHovered : (a -> String) -> List a -> Listbox -> Maybe a
+optionHovered uniqueId alloptions (Listbox listbox) =
+    Maybe.andThen (find uniqueId alloptions) listbox.optionHovered
 
 
-currentFocus : Focus -> Maybe String
-currentFocus theFocus =
-    case theFocus of
-        NoFocus ->
-            Nothing
-
-        Focus current ->
-            Just current
-
-        Pending { current } ->
-            Just current
-
-
-{-| Returns the HTML id of the currently focused entry.
+{-| Returns the HTML id of the currently focused option.
 -}
-focusedEntryId :
+optionActiveId :
     { uniqueId : a -> String
     , focusable : Bool
     , markActiveDescendant : Bool
@@ -198,18 +196,18 @@ focusedEntryId :
     -> List a
     -> Listbox
     -> Maybe String
-focusedEntryId config instance entries (Listbox listbox) =
-    case listbox.focus of
-        NoFocus ->
+optionActiveId config instance options (Listbox listbox) =
+    case listbox.optionActive of
+        NoActiveOption ->
             Nothing
 
-        Focus current ->
-            find config.uniqueId entries current
-                |> Maybe.map (printEntryId instance.id << config.uniqueId)
+        ActivatingOption { optionCurrent } ->
+            find config.uniqueId options optionCurrent
+                |> Maybe.map (printOptionId instance.id << config.uniqueId)
 
-        Pending { current } ->
-            find config.uniqueId entries current
-                |> Maybe.map (printEntryId instance.id << config.uniqueId)
+        ActiveOption current ->
+            find config.uniqueId options current
+                |> Maybe.map (printOptionId instance.id << config.uniqueId)
 
 
 
@@ -296,10 +294,10 @@ query.
 
 -}
 simpleTypeAhead : Int -> (a -> String) -> TypeAhead a
-simpleTypeAhead timeout entryToString =
+simpleTypeAhead timeout optionToString =
     TypeAhead timeout <|
         \query a ->
-            String.toLower (entryToString a)
+            String.toLower (optionToString a)
                 |> String.startsWith (String.toLower query)
 
 
@@ -321,36 +319,36 @@ typeAhead =
 type Msg a
     = NoOp
       -- FOCUS
-    | ListFocused String
-    | ListBlured
+    | UserFocusedList String
+    | UserBluredList
       -- MOUSE
-    | ListMouseDown
-    | ListMouseUp
-    | EntryMouseEntered String
-    | EntryMouseLeft
-    | EntryClicked a
+    | UserPressedMouse
+    | UserReleasedMouse
+    | UserHoveredOption String
+    | UserLeftOption
+    | UserClickedOption a
       -- ARROW KEYS
-    | ListArrowUpDown String
-    | ListShiftArrowUpDown String
-    | ListArrowDownDown String
-    | ListShiftArrowDownDown String
+    | UserPressedArrowUp String
+    | UserPressedArrowUpWithShift String
+    | UserPressedArrowDown String
+    | UserPressedArrowDownWithShift String
     | BrowserReturnedDomInfoOption a (Result Dom.Error DomInfoOption)
-    | ViewportOfListReceived Direction a (Result Dom.Error Dom.Viewport)
+    | BrowserReturnedViewportOfList Direction a (Result Dom.Error Dom.Viewport)
       -- ENTER/SPACE
-    | ListEnterDown String
-    | ListSpaceDown String
-    | ListShiftSpaceDown String
+    | UserPressedEnter String
+    | UserPressedSpace String
+    | UserPressedSpaceWithShift String
       -- HOME/END
-    | ListHomeDown String
-    | ListControlShiftHomeDown String
-    | ListEndDown String
-    | ListControlShiftEndDown String
+    | UserPressedHome String
+    | UserPressedHomeWithControlShift String
+    | UserPressedEnd String
+    | UserPressedEndWithControlShift String
       -- CTRL-A
-    | ListControlADown
+    | UserPressedAWithControl
       -- QUERY
-    | ListKeyDown String String
-    | CurrentTimeReceived String String Time.Posix
-    | Tick Time.Posix
+    | UserPressedKey String String
+    | BrowserReturnedCurrentTime String String Time.Posix
+    | BrowserSentTick Time.Posix
 
 
 type Direction
@@ -359,7 +357,7 @@ type Direction
 
 
 {-| Use this function to update the listbox state. You have to provide the same
-entries and selection as given to your view function.
+options and selection as given to your view function.
 
 For example:
 
@@ -369,7 +367,7 @@ For example:
                 let
                     ( newListbox, listboxCmd, newSelection ) =
                         Listbox.update updateConfig
-                            entries
+                            options
                             listboxMsg
                             model.listbox
                             model.selection
@@ -381,12 +379,12 @@ For example:
                 , Cmd.map ListboxMsg listboxCmd
                 )
 
-In a more sophisticated example, the entries could be dynamic, as well. (For
+In a more sophisticated example, the options could be dynamic, as well. (For
 example, loaded via an HTTP request.)
 
 You can provide the following customizations:
 
-  - **uniqueId**: A hash function for the entries.
+  - **uniqueId**: A hash function for the options.
 
   - **behaviour**: Behaviour customizations.
 
@@ -400,10 +398,10 @@ update :
     -> Listbox
     -> List a
     -> ( Listbox, Cmd (Msg a), List a )
-update config entries msg (Listbox data) selection =
+update config options msg (Listbox data) selection =
     let
         ( newData, cmd, newSelection ) =
-            updateHelp config entries msg data selection
+            updateHelp config options msg data selection
     in
     ( Listbox newData, cmd, newSelection )
 
@@ -415,153 +413,118 @@ type alias ConfigUpdate a =
 
 
 updateHelp : ConfigUpdate a -> List a -> Msg a -> Data -> List a -> ( Data, Cmd (Msg a), List a )
-updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
-    case Debug.log "msg" msg of
+updateHelp ({ uniqueId, behaviour } as config) alloptions msg data selection =
+    case msg of
         NoOp ->
             ( data, Cmd.none, selection )
 
         -- FOCUS
-        ListFocused id ->
-            if data.preventScroll then
+        UserFocusedList id ->
+            if data.mousePressed then
                 ( data, Cmd.none, selection )
 
             else
-                initFocus config allEntries data selection id
+                activateOptionInitial config alloptions data selection id
 
-        ListBlured ->
+        UserBluredList ->
             ( { data
                 | query = NoQuery
-                , preventScroll = False
+                , mousePressed = False
               }
             , Cmd.none
             , selection
             )
 
         -- MOUSE
-        ListMouseDown ->
-            ( { data | preventScroll = True }
+        UserPressedMouse ->
+            ( { data | mousePressed = True }
             , Cmd.none
             , selection
             )
 
-        ListMouseUp ->
-            ( { data | preventScroll = False }
+        UserReleasedMouse ->
+            ( { data | mousePressed = False }
             , Cmd.none
             , selection
             )
 
-        EntryMouseEntered newFocus ->
+        UserHoveredOption newFocus ->
             ( { data
-                | focus =
+                | optionActive =
                     if behaviour.separateFocus then
-                        data.focus
+                        data.optionActive
 
                     else
-                        Focus newFocus
-                , hover = Just newFocus
+                        ActiveOption newFocus
+                , optionHovered = Just newFocus
               }
             , Cmd.none
             , selection
             )
 
-        EntryMouseLeft ->
+        UserLeftOption ->
             ( { data
-                | hover =
+                | optionHovered =
                     if behaviour.separateFocus then
                         Nothing
 
                     else
-                        data.hover
+                        data.optionHovered
               }
             , Cmd.none
             , selection
             )
 
-        EntryClicked a ->
+        UserClickedOption a ->
             let
                 hash =
                     uniqueId a
             in
             ( { data
                 | query = NoQuery
-                , focus = Focus hash
-                , hover = Just hash
+                , optionActive = ActiveOption hash
+                , optionHovered = Just hash
               }
             , Cmd.none
             , selection
             )
-                |> toggle config a
+                |> toggleOption config a
 
         -- ARROW KEYS
-        ListArrowUpDown id ->
-            case data.focus of
-                NoFocus ->
-                    initFocus config allEntries data selection id
+        UserPressedArrowUp id ->
+            activateOptionPrevious False config alloptions data selection id
 
-                Focus hash ->
-                    scheduleFocusPrevious config allEntries data selection id False hash
+        UserPressedArrowUpWithShift id ->
+            activateOptionPrevious True config alloptions data selection id
 
-                Pending _ ->
-                    ( data, Cmd.none, selection )
+        UserPressedArrowDown id ->
+            activateOptionNext False config alloptions data selection id
 
-        ListShiftArrowUpDown id ->
-            case data.focus of
-                NoFocus ->
-                    initFocus config allEntries data selection id
-
-                Focus hash ->
-                    scheduleFocusPrevious config allEntries data selection id True hash
-
-                Pending _ ->
-                    ( data, Cmd.none, selection )
-
-        ListArrowDownDown id ->
-            case data.focus of
-                NoFocus ->
-                    initFocus config allEntries data selection id
-
-                Focus hash ->
-                    scheduleFocusNext config allEntries data selection id False hash
-
-                Pending _ ->
-                    ( data, Cmd.none, selection )
-
-        ListShiftArrowDownDown id ->
-            case data.focus of
-                NoFocus ->
-                    initFocus config allEntries data selection id
-
-                Focus hash ->
-                    scheduleFocusNext config allEntries data selection id True hash
-
-                Pending _ ->
-                    ( data, Cmd.none, selection )
+        UserPressedArrowDownWithShift id ->
+            activateOptionNext True config alloptions data selection id
 
         BrowserReturnedDomInfoOption a (Err id) ->
             ( data, Cmd.none, selection )
 
-        BrowserReturnedDomInfoOption a (Ok entryDomData) ->
-            case data.focus of
-                NoFocus ->
+        BrowserReturnedDomInfoOption a (Ok optionDomData) ->
+            case data.optionActive of
+                NoActiveOption ->
                     ( data, Cmd.none, selection )
 
-                Focus _ ->
-                    ( data, Cmd.none, selection )
-
-                Pending { id, pending, shiftDown } ->
+                ActivatingOption { id, optionPending, shiftDown } ->
                     let
                         newData =
-                            { data | focus = Focus pending }
+                            { data | optionActive = ActiveOption optionPending }
 
                         ( x, y ) =
-                            newPosition behaviour entryDomData
+                            newPosition behaviour optionDomData
                     in
                     if shiftDown then
                         ( newData
                         , setViewportOf id x y
                         , selection
                         )
-                            |> toggle config a
+                            |> toggleOption config a
 
                     else
                         ( newData
@@ -569,21 +532,21 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
                         , selection
                         )
 
-        ViewportOfListReceived direction a (Err id) ->
+                ActiveOption _ ->
+                    ( data, Cmd.none, selection )
+
+        BrowserReturnedViewportOfList direction a (Err id) ->
             ( data, Cmd.none, selection )
 
-        ViewportOfListReceived direction a (Ok viewport) ->
-            case data.focus of
-                NoFocus ->
+        BrowserReturnedViewportOfList direction a (Ok viewport) ->
+            case data.optionActive of
+                NoActiveOption ->
                     ( data, Cmd.none, selection )
 
-                Focus _ ->
-                    ( data, Cmd.none, selection )
-
-                Pending { id, pending, shiftDown } ->
+                ActivatingOption { id, optionPending, shiftDown } ->
                     let
                         newData =
-                            { data | focus = Focus pending }
+                            { data | optionActive = ActiveOption optionPending }
 
                         effect =
                             case direction of
@@ -598,7 +561,7 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
                         , effect
                         , selection
                         )
-                            |> toggle config a
+                            |> toggleOption config a
 
                     else
                         ( newData
@@ -606,29 +569,32 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
                         , selection
                         )
 
+                ActiveOption _ ->
+                    ( data, Cmd.none, selection )
+
         -- ENTER/SPACE
-        ListEnterDown id ->
-            case focusedEntry config.uniqueId allEntries (Listbox data) of
+        UserPressedEnter id ->
+            case optionActive config.uniqueId alloptions (Listbox data) of
                 Nothing ->
                     ( data, Cmd.none, selection )
 
                 Just a ->
                     ( data, Cmd.none, selection )
-                        |> toggle config a
+                        |> toggleOption config a
 
-        ListSpaceDown id ->
-            case focusedEntry config.uniqueId allEntries (Listbox data) of
+        UserPressedSpace id ->
+            case optionActive config.uniqueId alloptions (Listbox data) of
                 Nothing ->
                     ( data, Cmd.none, selection )
 
                 Just a ->
                     ( data, Cmd.none, selection )
-                        |> toggle config a
+                        |> toggleOption config a
 
-        ListShiftSpaceDown id ->
+        UserPressedSpaceWithShift id ->
             let
                 selected =
-                    Maybe.map2 (range uniqueId allEntries) (currentFocus data.focus) data.maybeLastSelectedEntry
+                    Maybe.map2 (range uniqueId alloptions) (optionActiveUniqueId data.optionActive) data.optionSelectedLast
                         |> Maybe.withDefault []
             in
             case selected of
@@ -637,34 +603,34 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
 
                 a :: listA ->
                     ( data, Cmd.none, selection )
-                        |> select config a listA
+                        |> selectOption config a listA
 
         -- HOME/END
-        ListHomeDown id ->
-            case List.head allEntries of
+        UserPressedHome id ->
+            case List.head alloptions of
                 Nothing ->
                     ( data, Cmd.none, selection )
 
                 Just a ->
                     ( { data
                         | query = NoQuery
-                        , focus = Focus (uniqueId a)
+                        , optionActive = ActiveOption (uniqueId a)
                       }
                     , scrollListToTop id
                     , selection
                     )
 
-        ListControlShiftHomeDown id ->
-            case Maybe.map uniqueId (List.head allEntries) of
+        UserPressedHomeWithControlShift id ->
+            case Maybe.map uniqueId (List.head alloptions) of
                 Nothing ->
                     ( data, Cmd.none, selection )
 
                 Just hash ->
                     let
                         selected =
-                            data.focus
-                                |> currentFocus
-                                |> Maybe.map (range uniqueId allEntries hash)
+                            data.optionActive
+                                |> optionActiveUniqueId
+                                |> Maybe.map (range uniqueId alloptions hash)
                                 |> Maybe.withDefault []
                     in
                     case selected of
@@ -673,10 +639,10 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
 
                         a :: listA ->
                             ( { data
-                                | focus = Focus hash
-                                , hover =
+                                | optionActive = ActiveOption hash
+                                , optionHovered =
                                     if behaviour.separateFocus then
-                                        data.hover
+                                        data.optionHovered
 
                                     else
                                         Just hash
@@ -684,33 +650,33 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
                             , scrollListToTop id
                             , selection
                             )
-                                |> select config a listA
+                                |> selectOption config a listA
 
-        ListEndDown id ->
-            case lastEntry allEntries of
+        UserPressedEnd id ->
+            case lastOption alloptions of
                 Nothing ->
                     ( data, Cmd.none, selection )
 
                 Just a ->
                     ( { data
                         | query = NoQuery
-                        , focus = Focus (uniqueId a)
+                        , optionActive = ActiveOption (uniqueId a)
                       }
                     , scrollListToBottom id
                     , selection
                     )
 
-        ListControlShiftEndDown id ->
-            case Maybe.map uniqueId (lastEntry allEntries) of
+        UserPressedEndWithControlShift id ->
+            case Maybe.map uniqueId (lastOption alloptions) of
                 Nothing ->
                     ( data, Cmd.none, selection )
 
                 Just hash ->
                     let
                         selected =
-                            data.focus
-                                |> currentFocus
-                                |> Maybe.map (range uniqueId allEntries hash)
+                            data.optionActive
+                                |> optionActiveUniqueId
+                                |> Maybe.map (range uniqueId alloptions hash)
                                 |> Maybe.withDefault []
                     in
                     case selected of
@@ -719,10 +685,10 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
 
                         a :: listA ->
                             ( { data
-                                | focus = Focus hash
-                                , hover =
+                                | optionActive = ActiveOption hash
+                                , optionHovered =
                                     if behaviour.separateFocus then
-                                        data.hover
+                                        data.optionHovered
 
                                     else
                                         Just hash
@@ -730,13 +696,13 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
                             , scrollListToBottom id
                             , selection
                             )
-                                |> select config a listA
+                                |> selectOption config a listA
 
         -- CTRL-A
-        ListControlADown ->
+        UserPressedAWithControl ->
             let
-                allEntriesSet =
-                    allEntries
+                alloptionsSet =
+                    alloptions
                         |> List.map uniqueId
                         |> Set.fromList
 
@@ -745,7 +711,7 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
                         |> List.map uniqueId
                         |> Set.fromList
             in
-            if Set.isEmpty (Set.diff allEntriesSet selectionSet) then
+            if Set.isEmpty (Set.diff alloptionsSet selectionSet) then
                 ( data
                 , Cmd.none
                 , []
@@ -754,22 +720,22 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
             else
                 ( data
                 , Cmd.none
-                , allEntries
+                , alloptions
                 )
 
         -- QUERY
-        ListKeyDown id key ->
+        UserPressedKey id key ->
             case behaviour.typeAhead of
                 NoTypeAhead ->
                     ( data, Cmd.none, selection )
 
                 TypeAhead _ _ ->
                     ( data
-                    , Task.perform (CurrentTimeReceived id key) Time.now
+                    , Task.perform (BrowserReturnedCurrentTime id key) Time.now
                     , selection
                     )
 
-        CurrentTimeReceived id key currentTime ->
+        BrowserReturnedCurrentTime id key currentTime ->
             case behaviour.typeAhead of
                 NoTypeAhead ->
                     ( data, Cmd.none, selection )
@@ -786,8 +752,8 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
 
                         maybeHash =
                             Maybe.andThen
-                                (findWith matchesQuery uniqueId queryText allEntries)
-                                (currentFocus data.focus)
+                                (findWith matchesQuery uniqueId queryText alloptions)
+                                (optionActiveUniqueId data.optionActive)
                     in
                     case maybeHash of
                         Nothing ->
@@ -796,10 +762,10 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
                         Just hash ->
                             ( { data
                                 | query = newQuery
-                                , focus = Focus hash
-                                , hover =
+                                , optionActive = ActiveOption hash
+                                , optionHovered =
                                     if behaviour.separateFocus then
-                                        data.hover
+                                        data.optionHovered
 
                                     else
                                         Just hash
@@ -808,7 +774,7 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
                             , selection
                             )
 
-        Tick currentTime ->
+        BrowserSentTick currentTime ->
             case data.query of
                 NoQuery ->
                     ( data, Cmd.none, selection )
@@ -831,16 +797,16 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
 -- FOCUS
 
 
-initFocus : ConfigUpdate a -> List a -> Data -> List a -> String -> ( Data, Cmd (Msg a), List a )
-initFocus ({ uniqueId, behaviour } as config) allEntries data selection id =
+activateOptionInitial : ConfigUpdate a -> List a -> Data -> List a -> String -> ( Data, Cmd (Msg a), List a )
+activateOptionInitial ({ uniqueId, behaviour } as config) alloptions data selection id =
     case
-        data.focus
-            |> currentFocus
-            |> or data.maybeLastSelectedEntry
-            |> Maybe.andThen (find uniqueId allEntries)
+        data.optionActive
+            |> optionActiveUniqueId
+            |> or data.optionSelectedLast
+            |> Maybe.andThen (find uniqueId alloptions)
             |> or (List.head selection)
-            |> Maybe.andThen (uniqueId >> find uniqueId allEntries)
-            |> or (List.head allEntries)
+            |> Maybe.andThen (uniqueId >> find uniqueId alloptions)
+            |> or (List.head alloptions)
     of
         Nothing ->
             ( { data | query = NoQuery }
@@ -855,132 +821,148 @@ initFocus ({ uniqueId, behaviour } as config) allEntries data selection id =
             in
             ( { data
                 | query = NoQuery
-                , focus = Focus hash
+                , optionActive = ActiveOption hash
               }
             , attemptToScrollToOption behaviour id hash Nothing
             , selection
             )
 
 
-scheduleFocusPrevious : ConfigUpdate a -> List a -> Data -> List a -> String -> Bool -> String -> ( Data, Cmd (Msg a), List a )
-scheduleFocusPrevious ({ uniqueId, behaviour } as config) allEntries data selection id shiftDown current =
-    case findPrevious uniqueId allEntries current of
-        Just (Last a) ->
-            if behaviour.jumpAtEnds then
-                ( { data
-                    | query = NoQuery
-                    , focus =
-                        Pending
-                            { id = id
-                            , current = current
-                            , pending = uniqueId a
-                            , shiftDown = shiftDown
-                            }
-                  }
-                , getViewportOfList id Up a
-                , selection
-                )
+activateOptionPrevious : Bool -> ConfigUpdate a -> List a -> Data -> List a -> String -> ( Data, Cmd (Msg a), List a )
+activateOptionPrevious shiftDown ({ uniqueId, behaviour } as config) alloptions data selection id =
+    case data.optionActive of
+        NoActiveOption ->
+            activateOptionInitial config alloptions data selection id
 
-            else
-                ( { data | query = NoQuery }
-                , Cmd.none
-                , selection
-                )
+        ActivatingOption _ ->
+            ( data, Cmd.none, selection )
 
-        Just (Previous a) ->
-            let
-                hash =
-                    uniqueId a
-            in
-            ( { data
-                | query = NoQuery
-                , focus =
-                    Pending
-                        { id = id
-                        , current = current
-                        , pending = hash
-                        , shiftDown = shiftDown
-                        }
-              }
-            , attemptToGetDomInfoOption id hash current a
-            , selection
-            )
+        ActiveOption hashCurrent ->
+            case findPrevious uniqueId alloptions hashCurrent of
+                Just (Last a) ->
+                    if behaviour.jumpAtEnds then
+                        ( { data
+                            | query = NoQuery
+                            , optionActive =
+                                ActivatingOption
+                                    { id = id
+                                    , optionCurrent = hashCurrent
+                                    , optionPending = uniqueId a
+                                    , shiftDown = shiftDown
+                                    }
+                          }
+                        , getViewportOfList id Up a
+                        , selection
+                        )
 
-        Nothing ->
-            initFocus config allEntries data selection id
+                    else
+                        ( { data | query = NoQuery }
+                        , Cmd.none
+                        , selection
+                        )
+
+                Just (Previous a) ->
+                    let
+                        hashActivatingOption =
+                            uniqueId a
+                    in
+                    ( { data
+                        | query = NoQuery
+                        , optionActive =
+                            ActivatingOption
+                                { id = id
+                                , optionCurrent = hashCurrent
+                                , optionPending = hashActivatingOption
+                                , shiftDown = shiftDown
+                                }
+                      }
+                    , attemptToGetDomInfoOption id hashActivatingOption hashCurrent a
+                    , selection
+                    )
+
+                Nothing ->
+                    activateOptionInitial config alloptions data selection id
 
 
-scheduleFocusNext : ConfigUpdate a -> List a -> Data -> List a -> String -> Bool -> String -> ( Data, Cmd (Msg a), List a )
-scheduleFocusNext ({ uniqueId, behaviour } as config) allEntries data selection id shiftDown current =
-    case findNext uniqueId allEntries current of
-        Just (First a) ->
-            if behaviour.jumpAtEnds then
-                ( { data
-                    | query = NoQuery
-                    , focus =
-                        Pending
-                            { id = id
-                            , current = current
-                            , pending = uniqueId a
-                            , shiftDown = shiftDown
-                            }
-                  }
-                , getViewportOfList id Down a
-                , selection
-                )
+activateOptionNext : Bool -> ConfigUpdate a -> List a -> Data -> List a -> String -> ( Data, Cmd (Msg a), List a )
+activateOptionNext shiftDown ({ uniqueId, behaviour } as config) alloptions data selection id =
+    case data.optionActive of
+        NoActiveOption ->
+            activateOptionInitial config alloptions data selection id
 
-            else
-                ( { data | query = NoQuery }
-                , Cmd.none
-                , selection
-                )
+        ActivatingOption _ ->
+            ( data, Cmd.none, selection )
 
-        Just (Next a) ->
-            let
-                hash =
-                    uniqueId a
-            in
-            ( { data
-                | query = NoQuery
-                , focus =
-                    Pending
-                        { id = id
-                        , current = current
-                        , pending = hash
-                        , shiftDown = shiftDown
-                        }
-              }
-            , attemptToGetDomInfoOption id hash current a
-            , selection
-            )
+        ActiveOption hashCurrent ->
+            case findNext uniqueId alloptions hashCurrent of
+                Just (First a) ->
+                    if behaviour.jumpAtEnds then
+                        ( { data
+                            | query = NoQuery
+                            , optionActive =
+                                ActivatingOption
+                                    { id = id
+                                    , optionCurrent = hashCurrent
+                                    , optionPending = uniqueId a
+                                    , shiftDown = shiftDown
+                                    }
+                          }
+                        , getViewportOfList id Down a
+                        , selection
+                        )
 
-        Nothing ->
-            initFocus config allEntries data selection id
+                    else
+                        ( { data | query = NoQuery }
+                        , Cmd.none
+                        , selection
+                        )
+
+                Just (Next a) ->
+                    let
+                        hashActivatingOption =
+                            uniqueId a
+                    in
+                    ( { data
+                        | query = NoQuery
+                        , optionActive =
+                            ActivatingOption
+                                { id = id
+                                , optionCurrent = hashCurrent
+                                , optionPending = hashActivatingOption
+                                , shiftDown = shiftDown
+                                }
+                      }
+                    , attemptToGetDomInfoOption id hashActivatingOption hashCurrent a
+                    , selection
+                    )
+
+                Nothing ->
+                    activateOptionInitial config alloptions data selection id
 
 
 
 -- SELECTION
 
 
-select : ConfigUpdate a -> a -> List a -> ( Data, Cmd (Msg a), List a ) -> ( Data, Cmd (Msg a), List a )
-select { uniqueId } a listA ( newData, effect, newSelection ) =
-    ( { newData | maybeLastSelectedEntry = Just (uniqueId a) }
-    , Cmd.none
+selectOption : ConfigUpdate a -> a -> List a -> ( Data, Cmd (Msg a), List a ) -> ( Data, Cmd (Msg a), List a )
+selectOption { uniqueId } a listA ( newData, effect, newSelection ) =
+    ( { newData | optionSelectedLast = Just (uniqueId a) }
+    , effect
     , List.uniqueBy uniqueId (a :: listA ++ newSelection)
     )
 
 
-toggle : ConfigUpdate a -> a -> ( Data, Cmd (Msg a), List a ) -> ( Data, Cmd (Msg a), List a )
-toggle { uniqueId } a ( newData, effect, newSelection ) =
+toggleOption : ConfigUpdate a -> a -> ( Data, Cmd (Msg a), List a ) -> ( Data, Cmd (Msg a), List a )
+toggleOption { uniqueId } a ( newData, effect, newSelection ) =
     if List.member a newSelection then
         ( newData
-        , Cmd.none
+        , effect
         , List.filter (\b -> a /= b) newSelection
         )
 
     else
-        ( { newData | maybeLastSelectedEntry = Just (uniqueId a) }
-        , Cmd.none
+        ( { newData | optionSelectedLast = Just (uniqueId a) }
+        , effect
         , List.uniqueBy uniqueId (a :: newSelection)
         )
 
@@ -988,10 +970,10 @@ toggle { uniqueId } a ( newData, effect, newSelection ) =
 {-| Sets the keyboard focus to the provided options.
 
 **Note**: This will not adjust the scroll position of the listbox, so you might
-want to apply `scrollToFocus` afterwards.
+want to apply `scrollToActiveOption` afterwards.
 
 -}
-focusEntry :
+activateOption :
     { uniqueId : a -> String
     , behaviour : Behaviour a
     }
@@ -999,11 +981,11 @@ focusEntry :
     -> Listbox
     -> List a
     -> ( Listbox, List a )
-focusEntry config newEntry (Listbox listbox) selection =
+activateOption config newOption (Listbox listbox) selection =
     ( Listbox
         { listbox
             | query = NoQuery
-            , focus = Focus (config.uniqueId newEntry)
+            , optionActive = ActiveOption (config.uniqueId newOption)
         }
     , selection
     )
@@ -1013,10 +995,10 @@ focusEntry config newEntry (Listbox listbox) selection =
 focus is already on the last option, the first option is selected.
 
 **Note**: This will not adjust the scroll position of the listbox, so you might
-want to apply `scrollToFocus` afterwards.
+want to apply `scrollToActiveOption` afterwards.
 
 -}
-focusNextOrFirstEntry :
+activateNextOrFirstOption :
     { uniqueId : a -> String
     , behaviour : Behaviour a
     }
@@ -1024,18 +1006,18 @@ focusNextOrFirstEntry :
     -> Listbox
     -> List a
     -> ( Listbox, List a )
-focusNextOrFirstEntry config allEntries (Listbox listbox) selection =
+activateNextOrFirstOption config alloptions (Listbox listbox) selection =
     let
         { uniqueId, behaviour } =
             config
 
         maybeA =
-            case currentFocus listbox.focus of
+            case optionActiveUniqueId listbox.optionActive of
                 Nothing ->
-                    List.head allEntries
+                    List.head alloptions
 
                 Just hash ->
-                    case findNext uniqueId allEntries hash of
+                    case findNext uniqueId alloptions hash of
                         Just (First a) ->
                             if behaviour.jumpAtEnds then
                                 Just a
@@ -1054,7 +1036,7 @@ focusNextOrFirstEntry config allEntries (Listbox listbox) selection =
             ( Listbox listbox, selection )
 
         Just a ->
-            ( Listbox { listbox | focus = Focus (uniqueId a) }
+            ( Listbox { listbox | optionActive = ActiveOption (uniqueId a) }
             , selection
             )
 
@@ -1063,10 +1045,10 @@ focusNextOrFirstEntry config allEntries (Listbox listbox) selection =
 focus is already on the first option, the first option is selected.
 
 **Note**: This will not adjust the scroll position of the listbox, so you might
-want to apply `scrollToFocus` afterwards.
+want to apply `scrollToActiveOption` afterwards.
 
 -}
-focusPreviousOrFirstEntry :
+activatePreviousOrFirstOption :
     { uniqueId : a -> String
     , behaviour : Behaviour a
     }
@@ -1074,18 +1056,18 @@ focusPreviousOrFirstEntry :
     -> Listbox
     -> List a
     -> ( Listbox, List a )
-focusPreviousOrFirstEntry config allEntries (Listbox listbox) selection =
+activatePreviousOrFirstOption config alloptions (Listbox listbox) selection =
     let
         { uniqueId, behaviour } =
             config
 
         maybeA =
-            case currentFocus listbox.focus of
+            case optionActiveUniqueId listbox.optionActive of
                 Nothing ->
-                    List.head allEntries
+                    List.head alloptions
 
                 Just hash ->
-                    case findPrevious uniqueId allEntries hash of
+                    case findPrevious uniqueId alloptions hash of
                         Just (Last a) ->
                             if behaviour.jumpAtEnds then
                                 Just a
@@ -1104,7 +1086,7 @@ focusPreviousOrFirstEntry config allEntries (Listbox listbox) selection =
             ( Listbox listbox, selection )
 
         Just a ->
-            ( Listbox { listbox | focus = Focus (uniqueId a) }
+            ( Listbox { listbox | optionActive = ActiveOption (uniqueId a) }
             , selection
             )
 
@@ -1116,7 +1098,7 @@ focusPreviousOrFirstEntry config allEntries (Listbox listbox) selection =
 getViewportOfList : String -> Direction -> a -> Cmd (Msg a)
 getViewportOfList id direction option =
     Dom.getViewportOf (printListId id)
-        |> Task.attempt (ViewportOfListReceived direction option)
+        |> Task.attempt (BrowserReturnedViewportOfList direction option)
 
 
 attemptToGetDomInfoOption : String -> String -> String -> a -> Cmd (Msg a)
@@ -1167,18 +1149,18 @@ setViewportOf id x y =
 {-| A command adjusting the scroll position of the listbox such that the
 current keyboard focus is visible.
 -}
-scrollToFocus : Behaviour a -> Instance a msg -> Listbox -> Cmd msg
-scrollToFocus behaviour { id, lift } (Listbox listbox) =
+scrollToActiveOption : Behaviour a -> Instance a msg -> Listbox -> Cmd msg
+scrollToActiveOption behaviour { id, lift } (Listbox listbox) =
     Cmd.map lift
-        (case listbox.focus of
-            NoFocus ->
+        (case listbox.optionActive of
+            NoActiveOption ->
                 Cmd.none
 
-            Focus current ->
+            ActiveOption current ->
                 attemptToScrollToOption behaviour id current Nothing
 
-            Pending { current } ->
-                attemptToScrollToOption behaviour id current Nothing
+            ActivatingOption { optionCurrent } ->
+                attemptToScrollToOption behaviour id optionCurrent Nothing
         )
 
 
@@ -1206,7 +1188,7 @@ getDomInfoOptionInitial id hash =
     Task.map3 DomInfoOptionInitial
         (Dom.getViewportOf (printListId id))
         (Dom.getElement (printListId id))
-        (Dom.getElement (printEntryId id hash))
+        (Dom.getElement (printOptionId id hash))
 
 
 getDomInfoOption : String -> String -> String -> Task Dom.Error DomInfoOption
@@ -1214,24 +1196,24 @@ getDomInfoOption id hash previousHash =
     Task.map4 DomInfoOption
         (Dom.getViewportOf (printListId id))
         (Dom.getElement (printListId id))
-        (Dom.getElement (printEntryId id hash))
-        (Dom.getElement (printEntryId id previousHash))
+        (Dom.getElement (printOptionId id hash))
+        (Dom.getElement (printOptionId id previousHash))
 
 
 scrollToOption : Behaviour msg -> String -> DomInfoOption -> Task Dom.Error ()
-scrollToOption behaviour id entryDomData =
+scrollToOption behaviour id optionDomData =
     let
         viewport =
-            entryDomData.viewportList.viewport
+            optionDomData.viewportList.viewport
 
         list =
-            entryDomData.elementList
+            optionDomData.elementList
 
         li =
-            entryDomData.elementLi
+            optionDomData.elementLi
 
         previousLi =
-            entryDomData.elementPreviousLi
+            optionDomData.elementPreviousLi
 
         -- MEASUREMENTS
         liY =
@@ -1247,40 +1229,40 @@ scrollToOption behaviour id entryDomData =
             previousLi.element.height
 
         -- CONDITIONS
-        previousEntryHidden =
+        previousOptionHidden =
             (previousLiY + previousLiHeight < viewport.y)
                 || (previousLiY > viewport.y + viewport.height)
 
-        newEntryTooLow =
+        newOptionTooLow =
             liY + liHeight + behaviour.minimalGap > viewport.y + viewport.height
 
-        newEntryTooHigh =
+        newOptionTooHigh =
             liY - behaviour.minimalGap < viewport.y
 
         -- EFFECT
-        centerNewEntry =
+        centerNewOption =
             domSetViewportOf viewport.x <|
                 (liY + liHeight / 2 - viewport.height / 2)
 
-        scrollDownToNewEntry =
+        scrollDownToNewOption =
             domSetViewportOf viewport.x <|
                 (liY + liHeight - viewport.height + behaviour.initialGap)
 
-        scrollUpToNewEntry =
+        scrollUpToNewOption =
             domSetViewportOf viewport.x <|
                 (liY - behaviour.initialGap)
 
         domSetViewportOf x y =
             Dom.setViewportOf (printListId id) x y
     in
-    if previousEntryHidden then
-        centerNewEntry
+    if previousOptionHidden then
+        centerNewOption
 
-    else if newEntryTooLow then
-        scrollDownToNewEntry
+    else if newOptionTooLow then
+        scrollDownToNewOption
 
-    else if newEntryTooHigh then
-        scrollUpToNewEntry
+    else if newOptionTooHigh then
+        scrollUpToNewOption
 
     else
         Task.succeed ()
@@ -1298,11 +1280,11 @@ scrollToOptionInitial behaviour id { viewportList, elementList, elementLi } =
         liHeight =
             elementLi.element.height
 
-        entryHidden =
+        optionHidden =
             (liY + liHeight - behaviour.minimalGap < viewport.y)
                 || (liY + behaviour.minimalGap > viewport.y + viewport.height)
     in
-    if entryHidden then
+    if optionHidden then
         Dom.setViewportOf (printListId id) viewport.x (liY + liHeight / 2 - viewport.height / 2)
 
     else
@@ -1335,7 +1317,7 @@ subscriptions (Listbox listbox) =
             Sub.none
 
         Query timeout _ _ ->
-            Time.every (toFloat (timeout // 3)) Tick
+            Time.every (toFloat (timeout // 3)) BrowserSentTick
 
 
 
@@ -1472,7 +1454,7 @@ customize the styling with the following fields:
   - **ul**: A list of html attributes applied to the outer listbox.
 
   - **li**: A function returning `HtmlDetails` for each option in your
-    entries list. It gets the actual option value `a` and flags telling you if
+    options list. It gets the actual option value `a` and flags telling you if
     this option is currently `selected`, `focused` or `hovered`. If the user
     typed in a query, you get this via the `maybeQuery` field.
 
@@ -1589,7 +1571,7 @@ html config =
 ---- VIEW
 
 
-{-| Take a list of all entries and a list of selected options and display it as
+{-| Take a list of all options and a list of selected options and display it as
 a listbox. You have to provide a `ViewConfig` for the styling and an `Instance`
 to uniquely identify this listbox. For example:
 
@@ -1606,7 +1588,7 @@ to uniquely identify this listbox. For example:
                 selection
             ]
 
-    fruits : List (Entry String divider)
+    fruits : List (Option String divider)
     fruits =
         List.map Listbox.option
             [ "Apple", "Banana", "Cherry" ]
@@ -1616,7 +1598,7 @@ to uniquely identify this listbox. For example:
 
 You can provide the following options:
 
-  - **uniqueId**: A hash function for the entries.
+  - **uniqueId**: A hash function for the options.
 
   - **focusable**: Should the listbox be focusable?
 
@@ -1633,7 +1615,7 @@ view :
     -> Listbox
     -> List a
     -> node
-view (Views views) config instance allEntries (Listbox data) selection =
+view (Views views) config instance alloptions (Listbox data) selection =
     views.listbox
         { id = printListId instance.id
         , role = "listbox"
@@ -1660,9 +1642,9 @@ view (Views views) config instance allEntries (Listbox data) selection =
                     Nothing
         , ariaActivedescendant =
             if config.markActiveDescendant then
-                currentFocus data.focus
-                    |> Maybe.andThen (find config.uniqueId allEntries)
-                    |> Maybe.map (config.uniqueId >> printEntryId instance.id)
+                optionActiveUniqueId data.optionActive
+                    |> Maybe.andThen (find config.uniqueId alloptions)
+                    |> Maybe.map (config.uniqueId >> printOptionId instance.id)
 
             else
                 Nothing
@@ -1678,12 +1660,12 @@ view (Views views) config instance allEntries (Listbox data) selection =
                     >> Decode.map (\msg -> ( instance.lift msg, True ))
                 )
                 KeyInfo.decoder
-        , onMousedown = instance.lift ListMouseDown
-        , onMouseup = instance.lift ListMouseUp
-        , onFocus = instance.lift (ListFocused instance.id)
-        , onBlur = instance.lift ListBlured
+        , onMousedown = instance.lift UserPressedMouse
+        , onMouseup = instance.lift UserReleasedMouse
+        , onFocus = instance.lift (UserFocusedList instance.id)
+        , onBlur = instance.lift UserBluredList
         }
-        { options = List.map (viewOption views.option config instance selection data) allEntries
+        { options = List.map (viewOption views.option config instance selection data) alloptions
         }
 
 
@@ -1720,16 +1702,16 @@ viewOption toNode config instance selection data option =
             config.uniqueId option
     in
     toNode
-        { id = printEntryId instance.id hash
+        { id = printOptionId instance.id hash
         , role = "option"
         , ariaChecked = stringFromBool selected
-        , onMouseenter = instance.lift (EntryMouseEntered hash)
-        , onMouseleave = instance.lift EntryMouseLeft
-        , onClick = instance.lift (EntryClicked option)
+        , onMouseenter = instance.lift (UserHoveredOption hash)
+        , onMouseleave = instance.lift UserLeftOption
+        , onClick = instance.lift (UserClickedOption option)
         }
         { selected = selected
-        , focused = currentFocus data.focus == maybeHash
-        , hovered = data.hover == maybeHash
+        , focused = optionActiveUniqueId data.optionActive == maybeHash
+        , hovered = data.optionHovered == maybeHash
         , maybeQuery =
             case data.query of
                 NoQuery ->
@@ -1768,27 +1750,27 @@ listKeyPress fromOutside id { code, altDown, controlDown, metaDown, shiftDown } 
     case code of
         "ArrowUp" ->
             if noModifierDown then
-                Decode.succeed (ListArrowUpDown id)
+                Decode.succeed (UserPressedArrowUp id)
 
             else if onlyShiftDown then
-                Decode.succeed (ListShiftArrowUpDown id)
+                Decode.succeed (UserPressedArrowUpWithShift id)
 
             else
                 notHandlingThatKey
 
         "ArrowDown" ->
             if noModifierDown then
-                Decode.succeed (ListArrowDownDown id)
+                Decode.succeed (UserPressedArrowDown id)
 
             else if onlyShiftDown then
-                Decode.succeed (ListShiftArrowDownDown id)
+                Decode.succeed (UserPressedArrowDownWithShift id)
 
             else
                 notHandlingThatKey
 
         "Enter" ->
             if noModifierDown then
-                Decode.succeed (ListEnterDown id)
+                Decode.succeed (UserPressedEnter id)
 
             else
                 notHandlingThatKey
@@ -1796,10 +1778,10 @@ listKeyPress fromOutside id { code, altDown, controlDown, metaDown, shiftDown } 
         " " ->
             if not fromOutside then
                 if onlyShiftDown then
-                    Decode.succeed (ListShiftSpaceDown id)
+                    Decode.succeed (UserPressedSpaceWithShift id)
 
                 else if noModifierDown then
-                    Decode.succeed (ListSpaceDown id)
+                    Decode.succeed (UserPressedSpace id)
 
                 else
                     notHandlingThatKey
@@ -1809,20 +1791,20 @@ listKeyPress fromOutside id { code, altDown, controlDown, metaDown, shiftDown } 
 
         "Home" ->
             if not altDown && controlDown && not metaDown && shiftDown then
-                Decode.succeed (ListControlShiftHomeDown id)
+                Decode.succeed (UserPressedHomeWithControlShift id)
 
             else if noModifierDown then
-                Decode.succeed (ListHomeDown id)
+                Decode.succeed (UserPressedHome id)
 
             else
                 notHandlingThatKey
 
         "End" ->
             if not altDown && controlDown && not metaDown && shiftDown then
-                Decode.succeed (ListControlShiftEndDown id)
+                Decode.succeed (UserPressedEndWithControlShift id)
 
             else if noModifierDown then
-                Decode.succeed (ListEndDown id)
+                Decode.succeed (UserPressedEnd id)
 
             else
                 notHandlingThatKey
@@ -1830,10 +1812,10 @@ listKeyPress fromOutside id { code, altDown, controlDown, metaDown, shiftDown } 
         "a" ->
             if not fromOutside then
                 if onlyControlDown then
-                    Decode.succeed ListControlADown
+                    Decode.succeed UserPressedAWithControl
 
                 else if noModifierDown && (String.length code == 1) then
-                    Decode.succeed (ListKeyDown id code)
+                    Decode.succeed (UserPressedKey id code)
 
                 else
                     notHandlingThatKey
@@ -1844,7 +1826,7 @@ listKeyPress fromOutside id { code, altDown, controlDown, metaDown, shiftDown } 
         _ ->
             if not fromOutside then
                 if noModifierDown && (String.length code == 1) then
-                    Decode.succeed (ListKeyDown id code)
+                    Decode.succeed (UserPressedKey id code)
 
                 else
                     notHandlingThatKey
@@ -1897,12 +1879,12 @@ preventDefaultOnKeyDown instance decoder =
 
 printListId : String -> String
 printListId id =
-    id
+    id ++ "__listbox"
 
 
-printEntryId : String -> String -> String
-printEntryId id entryId =
-    id ++ "__element--" ++ entryId
+printOptionId : String -> String -> String
+printOptionId id optionId =
+    id ++ "__listbox__element--" ++ optionId
 
 
 
@@ -1910,20 +1892,20 @@ printEntryId id entryId =
 
 
 newPosition : Behaviour a -> DomInfoOption -> ( Float, Float )
-newPosition behaviour entryDomData =
+newPosition behaviour optionDomData =
     let
         ---- SCROLLING
         viewport =
-            entryDomData.viewportList.viewport
+            optionDomData.viewportList.viewport
 
         list =
-            entryDomData.elementList
+            optionDomData.elementList
 
         li =
-            entryDomData.elementLi
+            optionDomData.elementLi
 
         previousLi =
-            entryDomData.elementPreviousLi
+            optionDomData.elementPreviousLi
 
         -- MEASUREMENTS
         liY =
@@ -1939,27 +1921,27 @@ newPosition behaviour entryDomData =
             previousLi.element.height
 
         -- CONDITIONS
-        previousEntryHidden =
+        previousOptionHidden =
             (previousLiY + previousLiHeight < viewport.y)
                 || (previousLiY > viewport.y + viewport.height)
 
-        newEntryTooLow =
+        newOptionTooLow =
             liY + liHeight + behaviour.minimalGap > viewport.y + viewport.height
 
-        newEntryTooHigh =
+        newOptionTooHigh =
             liY - behaviour.minimalGap < viewport.y
     in
-    if previousEntryHidden then
+    if previousOptionHidden then
         ( viewport.x
         , liY + liHeight / 2 - viewport.height / 2
         )
 
-    else if newEntryTooLow then
+    else if newOptionTooLow then
         ( viewport.x
         , liY + liHeight - viewport.height + behaviour.initialGap
         )
 
-    else if newEntryTooHigh then
+    else if newOptionTooHigh then
         ( viewport.x
         , liY - behaviour.initialGap
         )
@@ -2009,13 +1991,13 @@ listToMaybe listA =
 
 
 find : (a -> String) -> List a -> String -> Maybe a
-find uniqueId entries selectedId =
-    List.find (\entry -> uniqueId entry == selectedId) entries
+find uniqueId options selectedId =
+    List.find (\option -> uniqueId option == selectedId) options
 
 
 findWith : (String -> a -> Bool) -> (a -> String) -> String -> List a -> String -> Maybe String
-findWith matchesQuery uniqueId query entries id =
-    case entries of
+findWith matchesQuery uniqueId query options id =
+    case options of
         [] ->
             Nothing
 
@@ -2032,8 +2014,8 @@ findWith matchesQuery uniqueId query entries id =
 
 
 proceedWith : (String -> a -> Bool) -> (a -> String) -> String -> String -> List a -> Maybe String
-proceedWith matchesQuery uniqueId id query entries =
-    case entries of
+proceedWith matchesQuery uniqueId id query options =
+    case options of
         [] ->
             Just id
 
@@ -2045,9 +2027,9 @@ proceedWith matchesQuery uniqueId id query entries =
                 proceedWith matchesQuery uniqueId id query rest
 
 
-lastEntry : List a -> Maybe a
-lastEntry entries =
-    List.head (List.reverse entries)
+lastOption : List a -> Maybe a
+lastOption options =
+    List.head (List.reverse options)
 
 
 
@@ -2060,15 +2042,15 @@ type Previous a
 
 
 findPrevious : (a -> String) -> List a -> String -> Maybe (Previous a)
-findPrevious uniqueId entries currentId =
-    case entries of
+findPrevious uniqueId options currentId =
+    case options of
         [] ->
             Nothing
 
         first :: rest ->
             if uniqueId first == currentId then
-                entries
-                    |> lastEntry
+                options
+                    |> lastOption
                     |> Maybe.map Last
 
             else
@@ -2076,8 +2058,8 @@ findPrevious uniqueId entries currentId =
 
 
 findPreviousHelp : a -> (a -> String) -> List a -> String -> Maybe (Previous a)
-findPreviousHelp previous uniqueId entries currentId =
-    case entries of
+findPreviousHelp previous uniqueId options currentId =
+    case options of
         [] ->
             Nothing
 
@@ -2099,8 +2081,8 @@ type Next a
 
 
 findNext : (a -> String) -> List a -> String -> Maybe (Next a)
-findNext uniqueId entries currentId =
-    case entries of
+findNext uniqueId options currentId =
+    case options of
         [] ->
             Nothing
 
@@ -2114,8 +2096,8 @@ findNext uniqueId entries currentId =
 
 
 findNextHelp : a -> (a -> String) -> List a -> String -> Next a
-findNextHelp first uniqueId entries currentId =
-    case entries of
+findNextHelp first uniqueId options currentId =
+    case options of
         [] ->
             First first
 
@@ -2134,8 +2116,8 @@ findNextHelp first uniqueId entries currentId =
 
 
 range : (a -> String) -> List a -> String -> String -> List a
-range uniqueId entries end start =
-    case entries of
+range uniqueId options end start =
+    case options of
         [] ->
             []
 
@@ -2151,8 +2133,8 @@ range uniqueId entries end start =
 
 
 rangeHelp : (a -> String) -> List a -> String -> List a -> List a
-rangeHelp uniqueId collected end entries =
-    case entries of
+rangeHelp uniqueId collected end options =
+    case options of
         [] ->
             []
 
