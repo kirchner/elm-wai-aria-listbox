@@ -408,15 +408,13 @@ update config entries msg (Listbox data) selection =
     ( Listbox newData, cmd, newSelection )
 
 
-updateHelp :
+type alias ConfigUpdate a =
     { uniqueId : a -> String
     , behaviour : Behaviour a
     }
-    -> List a
-    -> Msg a
-    -> Data
-    -> List a
-    -> ( Data, Cmd (Msg a), List a )
+
+
+updateHelp : ConfigUpdate a -> List a -> Msg a -> Data -> List a -> ( Data, Cmd (Msg a), List a )
 updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
     case Debug.log "msg" msg of
         NoOp ->
@@ -833,15 +831,7 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
 -- FOCUS
 
 
-initFocus :
-    { uniqueId : a -> String
-    , behaviour : Behaviour a
-    }
-    -> List a
-    -> Data
-    -> List a
-    -> String
-    -> ( Data, Cmd (Msg a), List a )
+initFocus : ConfigUpdate a -> List a -> Data -> List a -> String -> ( Data, Cmd (Msg a), List a )
 initFocus ({ uniqueId, behaviour } as config) allEntries data selection id =
     case
         data.focus
@@ -872,17 +862,7 @@ initFocus ({ uniqueId, behaviour } as config) allEntries data selection id =
             )
 
 
-scheduleFocusPrevious :
-    { uniqueId : a -> String
-    , behaviour : Behaviour a
-    }
-    -> List a
-    -> Data
-    -> List a
-    -> String
-    -> Bool
-    -> String
-    -> ( Data, Cmd (Msg a), List a )
+scheduleFocusPrevious : ConfigUpdate a -> List a -> Data -> List a -> String -> Bool -> String -> ( Data, Cmd (Msg a), List a )
 scheduleFocusPrevious ({ uniqueId, behaviour } as config) allEntries data selection id shiftDown current =
     case findPrevious uniqueId allEntries current of
         Just (Last a) ->
@@ -930,17 +910,7 @@ scheduleFocusPrevious ({ uniqueId, behaviour } as config) allEntries data select
             initFocus config allEntries data selection id
 
 
-scheduleFocusNext :
-    { uniqueId : a -> String
-    , behaviour : Behaviour a
-    }
-    -> List a
-    -> Data
-    -> List a
-    -> String
-    -> Bool
-    -> String
-    -> ( Data, Cmd (Msg a), List a )
+scheduleFocusNext : ConfigUpdate a -> List a -> Data -> List a -> String -> Bool -> String -> ( Data, Cmd (Msg a), List a )
 scheduleFocusNext ({ uniqueId, behaviour } as config) allEntries data selection id shiftDown current =
     case findNext uniqueId allEntries current of
         Just (First a) ->
@@ -992,14 +962,7 @@ scheduleFocusNext ({ uniqueId, behaviour } as config) allEntries data selection 
 -- SELECTION
 
 
-select :
-    { uniqueId : a -> String
-    , behaviour : Behaviour a
-    }
-    -> a
-    -> List a
-    -> ( Data, Cmd (Msg a), List a )
-    -> ( Data, Cmd (Msg a), List a )
+select : ConfigUpdate a -> a -> List a -> ( Data, Cmd (Msg a), List a ) -> ( Data, Cmd (Msg a), List a )
 select { uniqueId } a listA ( newData, effect, newSelection ) =
     ( { newData | maybeLastSelectedEntry = Just (uniqueId a) }
     , Cmd.none
@@ -1007,13 +970,7 @@ select { uniqueId } a listA ( newData, effect, newSelection ) =
     )
 
 
-toggle :
-    { uniqueId : a -> String
-    , behaviour : Behaviour a
-    }
-    -> a
-    -> ( Data, Cmd (Msg a), List a )
-    -> ( Data, Cmd (Msg a), List a )
+toggle : ConfigUpdate a -> a -> ( Data, Cmd (Msg a), List a ) -> ( Data, Cmd (Msg a), List a )
 toggle { uniqueId } a ( newData, effect, newSelection ) =
     if List.member a newSelection then
         ( newData
