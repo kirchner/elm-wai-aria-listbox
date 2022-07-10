@@ -340,33 +340,37 @@ typeAhead =
 {-| -}
 type Msg a
     = NoOp
-    | BrowserReturnedDomInfoOption a (Result Dom.Error DomInfoOption)
-    | ViewportOfListReceived Direction a (Result Dom.Error Dom.Viewport)
-      -- LIST
-    | ListMouseDown
-    | ListMouseUp
+      -- FOCUS
     | ListFocused String
     | ListBlured
+      -- MOUSE
+    | ListMouseDown
+    | ListMouseUp
+    | EntryMouseEntered String
+    | EntryMouseLeft
+    | EntryClicked a
+      -- ARROW KEYS
     | ListArrowUpDown String
     | ListShiftArrowUpDown String
     | ListArrowDownDown String
     | ListShiftArrowDownDown String
+    | BrowserReturnedDomInfoOption a (Result Dom.Error DomInfoOption)
+    | ViewportOfListReceived Direction a (Result Dom.Error Dom.Viewport)
+      -- ENTER/SPACE
     | ListEnterDown String
     | ListSpaceDown String
     | ListShiftSpaceDown String
+      -- HOME/END
     | ListHomeDown String
     | ListControlShiftHomeDown String
     | ListEndDown String
     | ListControlShiftEndDown String
+      -- CTRL-A
     | ListControlADown
       -- QUERY
     | ListKeyDown String String
     | CurrentTimeReceived String String Time.Posix
     | Tick Time.Posix
-      -- ENTRY
-    | EntryMouseEntered String
-    | EntryMouseLeft
-    | EntryClicked a
 
 
 type Direction
@@ -438,6 +442,135 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
         NoOp ->
             ( data, Cmd.none, selection )
 
+        -- FOCUS
+        ListFocused id ->
+            if data.preventScroll then
+                ( data, Cmd.none, selection )
+
+            else
+                initFocus config allEntries data selection id
+
+        ListBlured ->
+            ( { data
+                | query = NoQuery
+                , preventScroll = False
+              }
+            , Cmd.none
+            , selection
+            )
+
+        -- MOUSE
+        ListMouseDown ->
+            ( { data | preventScroll = True }
+            , Cmd.none
+            , selection
+            )
+
+        ListMouseUp ->
+            ( { data | preventScroll = False }
+            , Cmd.none
+            , selection
+            )
+
+        EntryMouseEntered newFocus ->
+            ( { data
+                | focus =
+                    if behaviour.separateFocus then
+                        data.focus
+
+                    else
+                        Focus newFocus
+                , hover = Just newFocus
+              }
+            , Cmd.none
+            , selection
+            )
+
+        EntryMouseLeft ->
+            ( { data
+                | hover =
+                    if behaviour.separateFocus then
+                        Nothing
+
+                    else
+                        data.hover
+              }
+            , Cmd.none
+            , selection
+            )
+
+        EntryClicked a ->
+            let
+                hash =
+                    uniqueId a
+            in
+            if behaviour.selectionFollowsFocus then
+                ( { data
+                    | query = NoQuery
+                    , focus = Focus hash
+                    , hover = Just hash
+                  }
+                , Cmd.none
+                , selection
+                )
+                    |> select config a selection
+
+            else
+                ( { data
+                    | query = NoQuery
+                    , focus = Focus hash
+                    , hover = Just hash
+                  }
+                , Cmd.none
+                , selection
+                )
+                    |> toggle config a
+
+        -- ARROW KEYS
+        ListArrowUpDown id ->
+            case data.focus of
+                NoFocus ->
+                    initFocus config allEntries data selection id
+
+                Focus hash ->
+                    scheduleFocusPrevious config allEntries data selection id False hash
+
+                Pending _ ->
+                    ( data, Cmd.none, selection )
+
+        ListShiftArrowUpDown id ->
+            case data.focus of
+                NoFocus ->
+                    initFocus config allEntries data selection id
+
+                Focus hash ->
+                    scheduleFocusPrevious config allEntries data selection id True hash
+
+                Pending _ ->
+                    ( data, Cmd.none, selection )
+
+        ListArrowDownDown id ->
+            case data.focus of
+                NoFocus ->
+                    initFocus config allEntries data selection id
+
+                Focus hash ->
+                    scheduleFocusNext config allEntries data selection id False hash
+
+                Pending _ ->
+                    ( data, Cmd.none, selection )
+
+        ListShiftArrowDownDown id ->
+            case data.focus of
+                NoFocus ->
+                    initFocus config allEntries data selection id
+
+                Focus hash ->
+                    scheduleFocusNext config allEntries data selection id True hash
+
+                Pending _ ->
+                    ( data, Cmd.none, selection )
+
         BrowserReturnedDomInfoOption a (Err id) ->
             ( data, Cmd.none, selection )
 
@@ -495,14 +628,10 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
                         effect =
                             case direction of
                                 Up ->
-                                    setViewportOf id
-                                        viewport.viewport.x
-                                        viewport.scene.height
+                                    setViewportOf id viewport.viewport.x viewport.scene.height
 
                                 Down ->
-                                    setViewportOf id
-                                        viewport.viewport.x
-                                        0
+                                    setViewportOf id viewport.viewport.x 0
                     in
                     if behaviour.selectionFollowsFocus && not shiftDown then
                         ( newData
@@ -523,79 +652,7 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
                         , selection
                         )
 
-        -- LIST
-        ListMouseDown ->
-            ( { data | preventScroll = True }
-            , Cmd.none
-            , selection
-            )
-
-        ListMouseUp ->
-            ( { data | preventScroll = False }
-            , Cmd.none
-            , selection
-            )
-
-        ListFocused id ->
-            if data.preventScroll then
-                ( data, Cmd.none, selection )
-
-            else
-                initFocus config allEntries data selection id
-
-        ListBlured ->
-            ( { data
-                | query = NoQuery
-                , preventScroll = False
-              }
-            , Cmd.none
-            , selection
-            )
-
-        ListArrowUpDown id ->
-            case data.focus of
-                NoFocus ->
-                    initFocus config allEntries data selection id
-
-                Focus hash ->
-                    scheduleFocusPrevious config allEntries data selection id False hash
-
-                Pending _ ->
-                    ( data, Cmd.none, selection )
-
-        ListShiftArrowUpDown id ->
-            case data.focus of
-                NoFocus ->
-                    initFocus config allEntries data selection id
-
-                Focus hash ->
-                    scheduleFocusPrevious config allEntries data selection id True hash
-
-                Pending _ ->
-                    ( data, Cmd.none, selection )
-
-        ListArrowDownDown id ->
-            case data.focus of
-                NoFocus ->
-                    initFocus config allEntries data selection id
-
-                Focus hash ->
-                    scheduleFocusNext config allEntries data selection id False hash
-
-                Pending _ ->
-                    ( data, Cmd.none, selection )
-
-        ListShiftArrowDownDown id ->
-            case data.focus of
-                NoFocus ->
-                    initFocus config allEntries data selection id
-
-                Focus hash ->
-                    scheduleFocusNext config allEntries data selection id True hash
-
-                Pending _ ->
-                    ( data, Cmd.none, selection )
-
+        -- ENTER/SPACE
         ListEnterDown id ->
             case focusedEntry config.uniqueId allEntries (Listbox data) of
                 Nothing ->
@@ -628,6 +685,7 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
                     ( data, Cmd.none, selection )
                         |> select config a listA
 
+        -- HOME/END
         ListHomeDown id ->
             case List.head allEntries of
                 Nothing ->
@@ -720,6 +778,7 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
                             )
                                 |> select config a listA
 
+        -- CTRL-A
         ListControlADown ->
             let
                 allEntriesSet =
@@ -812,61 +871,6 @@ updateHelp ({ uniqueId, behaviour } as config) allEntries msg data selection =
 
                     else
                         ( data, Cmd.none, selection )
-
-        -- ENTRY
-        EntryMouseEntered newFocus ->
-            ( { data
-                | focus =
-                    if behaviour.separateFocus then
-                        data.focus
-
-                    else
-                        Focus newFocus
-                , hover = Just newFocus
-              }
-            , Cmd.none
-            , selection
-            )
-
-        EntryMouseLeft ->
-            ( { data
-                | hover =
-                    if behaviour.separateFocus then
-                        Nothing
-
-                    else
-                        data.hover
-              }
-            , Cmd.none
-            , selection
-            )
-
-        EntryClicked a ->
-            let
-                hash =
-                    uniqueId a
-            in
-            if behaviour.selectionFollowsFocus then
-                ( { data
-                    | query = NoQuery
-                    , focus = Focus hash
-                    , hover = Just hash
-                  }
-                , Cmd.none
-                , selection
-                )
-                    |> select config a selection
-
-            else
-                ( { data
-                    | query = NoQuery
-                    , focus = Focus hash
-                    , hover = Just hash
-                  }
-                , Cmd.none
-                , selection
-                )
-                    |> toggle config a
 
 
 
