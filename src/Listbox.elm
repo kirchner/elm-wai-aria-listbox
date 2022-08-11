@@ -1696,7 +1696,7 @@ viewOption toNode config instance selection data option =
             Just (config.uniqueId option)
 
         selected =
-            List.any ((==) option) selection
+            List.any (\otherOption -> config.uniqueId otherOption == config.uniqueId option) selection
 
         hash =
             config.uniqueId option
