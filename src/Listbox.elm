@@ -954,10 +954,10 @@ selectOption { uniqueId } a listA ( newData, effect, newSelection ) =
 
 toggleOption : ConfigUpdate a -> a -> ( Data, Cmd (Msg a), List a ) -> ( Data, Cmd (Msg a), List a )
 toggleOption { uniqueId } a ( newData, effect, newSelection ) =
-    if List.member a newSelection then
+    if List.member (uniqueId a) (List.map uniqueId newSelection) then
         ( newData
         , effect
-        , List.filter (\b -> a /= b) newSelection
+        , List.filter (\b -> uniqueId a /= uniqueId b) newSelection
         )
 
     else
