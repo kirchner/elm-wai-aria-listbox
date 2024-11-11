@@ -104,6 +104,7 @@ import Json.Decode as Decode exposing (Decoder)
 import Json.Decode.Pipeline as Decode
 import Json.Encode exposing (Value)
 import List.Extra as List
+import Process
 import Set
 import Task exposing (Task)
 import Time exposing (Posix)
@@ -1097,26 +1098,30 @@ activatePreviousOrFirstOption config alloptions (Listbox listbox) selection =
 
 getViewportOfList : String -> Direction -> a -> Cmd (Msg a)
 getViewportOfList id direction option =
-    Dom.getViewportOf (printListId id)
+    Process.sleep 0
+        |> Task.andThen (\_ -> Dom.getViewportOf (printListId id))
         |> Task.attempt (BrowserReturnedViewportOfList direction option)
 
 
 attemptToGetDomInfoOption : String -> String -> String -> a -> Cmd (Msg a)
 attemptToGetDomInfoOption id hash previousHash option =
-    getDomInfoOption id hash previousHash
+    Process.sleep 0
+        |> Task.andThen (\_ -> getDomInfoOption id hash previousHash)
         |> Task.attempt (BrowserReturnedDomInfoOption option)
 
 
 scrollListToTop : String -> Cmd (Msg a)
 scrollListToTop id =
-    Dom.getViewportOf (printListId id)
+    Process.sleep 0
+        |> Task.andThen (\_ -> Dom.getViewportOf (printListId id))
         |> Task.andThen (\list -> Dom.setViewportOf (printListId id) list.viewport.x 0)
         |> Task.attempt (\_ -> NoOp)
 
 
 scrollListToBottom : String -> Cmd (Msg a)
 scrollListToBottom id =
-    Dom.getViewportOf (printListId id)
+    Process.sleep 0
+        |> Task.andThen (\_ -> Dom.getViewportOf (printListId id))
         |> Task.andThen
             (\list ->
                 Dom.setViewportOf (printListId id)
@@ -1130,19 +1135,22 @@ attemptToScrollToOption : Behaviour msg -> String -> String -> Maybe String -> C
 attemptToScrollToOption behaviour id hash maybePreviousHash =
     case maybePreviousHash of
         Nothing ->
-            getDomInfoOptionInitial id hash
+            Process.sleep 0
+                |> Task.andThen (\_ -> getDomInfoOptionInitial id hash)
                 |> Task.andThen (scrollToOptionInitial behaviour id)
                 |> Task.attempt (\_ -> NoOp)
 
         Just previousHash ->
-            getDomInfoOption id hash previousHash
+            Process.sleep 0
+                |> Task.andThen (\_ -> getDomInfoOption id hash previousHash)
                 |> Task.andThen (scrollToOption behaviour id)
                 |> Task.attempt (\_ -> NoOp)
 
 
 setViewportOf : String -> Float -> Float -> Cmd (Msg a)
 setViewportOf id x y =
-    Dom.setViewportOf (printListId id) x y
+    Process.sleep 0
+        |> Task.andThen (\_ -> Dom.setViewportOf (printListId id) x y)
         |> Task.attempt (\_ -> NoOp)
 
 
